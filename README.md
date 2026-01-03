@@ -116,7 +116,7 @@ Milestones are tracked via annotated git tags:
 
 - `v0-lexer`
 - `v0-parser`
-- (next) `v0-interpreter`
+- `v0-interpreter`
 
 To push tags to GitHub:
 ```powershell
@@ -152,4 +152,4 @@ git push --tags
 ## Notes
 
 - This repo intentionally avoids multiple sub-repos. Lexer/parser/interpreter live together and share tokens/AST.
-- The language spec (Draft 4.1+) is maintained as a separate markdown document; consider adding it under `spec/` in this repo for convenience.
+
