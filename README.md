@@ -1,7 +1,12 @@
-# Rill v0 — Lexer Prototype
+# Rill v0 — Lexer + Parser Prototype
 
-This package is a minimal, implementation-ready lexer for the Rill language spec (Draft 4.1+).
-It tokenizes:
+This package is a minimal lexer + parser prototype for the Rill language spec (Draft 4.1+).
+
+It currently supports:
+- lexing (tokens)
+- parsing (AST) for a v0 subset: `show`, `set ... to ...`, `change ... to ...` and expressions
+
+The lexer tokenizes:
 - keywords, identifiers
 - numbers
 - strings (single or double quotes) with escapes
@@ -18,10 +23,19 @@ py -m venv .venv
 py -m pip install -e ".[dev]"
 ```
 
-## Run the lexer on a file
+## Print tokens
 
 ```powershell
+py -m rill.cli tokens path\to\program.rill
+
+# backward compatible (defaults to tokens)
 py -m rill.cli path\to\program.rill
+```
+
+## Parse and print the AST
+
+```powershell
+py -m rill.cli parse path\to\program.rill
 ```
 
 ## Run tests
