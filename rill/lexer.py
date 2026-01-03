@@ -325,17 +325,29 @@ class Lexer:
                     raise RillLexError("Unterminated escape sequence in string.", Span(esc_line, esc_col, esc_col))
 
                 if esc == "n":
-                    chars.append("\n"); self._advance(); continue
+                    chars.append("\n")
+                    self._advance()
+                    continue
                 if esc == "t":
-                    chars.append("\t"); self._advance(); continue
+                    chars.append("\t")
+                    self._advance() 
+                    continue
                 if esc == "r":
-                    chars.append("\r"); self._advance(); continue
+                    chars.append("\r")
+                    self._advance() 
+                    continue
                 if esc == "\\":
-                    chars.append("\\"); self._advance(); continue
+                    chars.append("\\")
+                    self._advance() 
+                    continue
                 if esc == '"':
-                    chars.append('"'); self._advance(); continue
+                    chars.append('"') 
+                    self._advance() 
+                    continue
                 if esc == "'":
-                    chars.append("'"); self._advance(); continue
+                    chars.append("'") 
+                    self._advance() 
+                    continue
 
                 raise RillLexError(f"Unknown escape sequence \\{esc}.", Span(esc_line, esc_col, esc_col))
 
