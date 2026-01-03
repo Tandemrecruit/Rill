@@ -409,7 +409,7 @@ define greet taking name, punctuation = "!"
     give back "Hello, " + name + punctuation
 end
 
-show greet(name: "Ryan", punctuation: "!!!")
+show greet(name: "John", punctuation: "!!!")
 ```
 
 ### 13.3 Implicit return

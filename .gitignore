@@ -5,4 +5,7 @@ __pycache__/
 dist/
 build/
 tmp.rill
+example.rill
 .vscode/
+coverage.xml
+.coverage
