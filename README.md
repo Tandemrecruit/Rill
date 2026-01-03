@@ -1,6 +1,6 @@
 # Rill (Prototype)
 
-Rill is a beginner-first programming language designed around **explicitness** and **teachability** (e.g., `set` vs `change`, explainable execution, table-first data in later milestones).
+Rill is a beginner-first programming language designed around readable, English-like syntax, explainable execution, and (in later milestones) table-first data operations.
 
 This repository is a **single master repo** for all Rill work (lexer → parser → interpreter → future features).
 
@@ -17,21 +17,28 @@ This repository is a **single master repo** for all Rill work (lexer → parser 
   - Reads files as `utf-8-sig` (handles Windows UTF-8 BOM)
 
 - **Parser**
-  - Statements: `show`, `set … to …`, `change … to …`
+  - Statements:
+    - `show …`
+    - `set <name> to …`
+    - `change <name> to …`
+    - `if …` / `otherwise` / `end`
+    - `repeat … times` / `repeat while …` / `end`
+    - `stop` / `skip` (loop control)
   - Assignment targets: `name` and `name[index]`
   - Expressions with precedence: unary (`not`, unary `-`), `* / %`, `+ -`, comparisons, `and`, `or`, grouping, indexing
 
 - **Interpreter**
-  - Runs the same v0 subset: `show`, `set`, `change`
+  - Executes the v0 language subset above (including `if` / `repeat` / `stop` / `skip`)
   - Value types in v0: `number`, `text`, `boolean`, `empty`
   - Strict typing (no silent coercion)
 
 ### Not implemented yet
-- `if` / `repeat` / `define` / `give back`
+- Functions: `define … taking …` / `give back`
 - records/maps/tables (syntax and runtime)
 - `trace` / `explain` modes
 - file module (`file.load` / `file.save`)
 - testing blocks (`check` / `expect`)
+- additional loop forms (e.g., `repeat … from … to … step …`)
 
 ---
 
@@ -39,7 +46,7 @@ This repository is a **single master repo** for all Rill work (lexer → parser 
 
 ### Setup
 ```powershell
-cd Rill
+cd <repo-folder>
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 py -m pip install -e ".[dev]"
@@ -48,29 +55,34 @@ py -m pip install -e ".[dev]"
 ### Create a sample program
 ```powershell
 @"
-set x to 2 + 3 * 4
-show x
-change x to x + 1
-show x % 2
-"@ | Set-Content .\example.rill -Encoding utf8
+set x to 0
+
+repeat 5 times
+    change x to x + 1
+end
+
+if x = 5
+    show "ok"
+otherwise
+    show "bad"
+end
+"@ | Set-Content .\example.rill -Encoding utf8 
 ```
 
 ### Run
 ```powershell
 # print tokens
-py -m rill.cli tokens .\example.rill
+py -m rill tokens .\example.rill
 
 # print AST
-py -m rill.cli parse .\example.rill
+py -m rill parse .\example.rill
 
-# execute (interpreter v0)
-py -m rill.cli run .\example.rill
+# execute
+py -m rill run .\example.rill
 ```
-
 Expected output for `run`:
-```
-14
-1
+```nginx
+ok
 ```
 
 ### Run tests
@@ -80,22 +92,27 @@ py -m pytest
 
 ---
 
-## CLI behavior
+## CLI Behavior
 
 The CLI supports subcommands:
-
 - `tokens <file>` — tokenize and print tokens
-- `parse <file>` — parse and print the AST
+- `parse <file>` — parse and print AST
 - `run <file>` — parse and execute (v0 subset)
 
+Entry points (all equivalent when installed with `pip install -e`):
+
+- `py -m rill <subcommand> <file>`
+
+- `rill <subcommand> <file>`
+
+- `py -m rill.cli <subcommand> <file>`
+
 Backward-compatible form:
+
 - `py -m rill.cli <file>` defaults to `tokens`
-
 ---
-
 ## Repository layout
-
-```
+```bash
 rill/                 # Python package
   lexer.py
   parser.py
@@ -107,49 +124,46 @@ rill/                 # Python package
 tests/
 examples/             # (optional) add sample .rill programs here
 ```
-
 ---
-
 ## Milestone tags
-
-Milestones are tracked via annotated git tags:
-
+Milestones are tracked via annotated git tags (recommended format: `v0-<milestone>`):
 - `v0-lexer`
 - `v0-parser`
 - `v0-interpreter`
+- `v0-control-flow`
 
-To push tags to GitHub:
+To push tags to Github:
 ```powershell
 git push --tags
 ```
-
 ---
-
 ## Roadmap (near-term)
+1. Interpreter polish
+    - Better runtime errors (friendlier messages)
 
-1. **Interpreter v0 completeness**
-   - Better runtime errors (friendlier messages)
-   - More expression forms as needed by upcoming syntax
+    - More expression forms as needed by upcoming syntax
 
-2. **Control flow**
-   - `if / otherwise / end`
-   - `repeat …` (times / while / range with `step` rules)
+2. More loop forms
 
-3. **Functions**
-   - `define … taking …`
-   - `give back`
+    - repeat … from … to … step … (range/step rules)
 
-4. **Data structures + tables**
-   - records vs maps
-   - table operators and aggregates
+3. Functions
 
-5. **Differentiators**
-   - `trace` and `explain` execution modes
-   - teaching-grade error messages
+    - define … taking …
 
+    - give back
+
+4. Data structures + tables
+
+    -records vs maps
+
+    - table operators and aggregates
+
+5. Differentiators
+
+    - trace and explain execution modes
+
+    - teaching-grade error messages
 ---
-
 ## Notes
-
 - This repo intentionally avoids multiple sub-repos. Lexer/parser/interpreter live together and share tokens/AST.
-
