@@ -106,3 +106,16 @@ def test_change_target_name_and_index():
     assert isinstance(s1, ChangeStmt)
     assert isinstance(s1.target, IndexTarget)
     assert s1.target.index.value == 0
+
+
+def test_parse_if_otherwise():
+    src = "if true\nshow 1\notherwise\nshow 2\nend\n"
+    program = Parser(Lexer(src).lex()).parse()
+    assert len(program.statements) == 1
+    assert program.statements[0].__class__.__name__ == "IfStmt"
+
+def test_parse_repeat_times_and_while():
+    src = "repeat 3 times\nshow 1\nend\nrepeat while false\nshow 2\nend\n"
+    program = Parser(Lexer(src).lex()).parse()
+    assert program.statements[0].__class__.__name__ == "RepeatTimesStmt"
+    assert program.statements[1].__class__.__name__ == "RepeatWhileStmt"

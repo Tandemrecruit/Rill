@@ -45,3 +45,85 @@ def test_boolean_ops():
     src = "show true and false\nshow true or false\nshow not false\n"
     out = run_src(src)
     assert out == ["false", "true", "true"]
+
+
+def test_if_executes_branch_and_scopes():
+    src = "\n".join([
+        "set x to 0",
+        "if true",
+        "    set y to 1",
+        "    change x to 5",
+        "otherwise",
+        "    change x to 9",
+        "end",
+        "show x",
+        "",
+    ])
+    out = run_src(src)
+    assert out == ["5"]
+
+    # y is block-scoped: should error outside
+    src2 = "\n".join([
+        "if true",
+        "    set y to 1",
+        "end",
+        "show y",
+        "",
+    ])
+    with pytest.raises(RillRuntimeError):
+        run_src(src2)
+
+def test_repeat_times_and_stop_skip():
+    src = "\n".join([
+        "set total to 0",
+        "repeat 5 times",
+        "    change total to total + 1",
+        "end",
+        "show total",
+        "",
+    ])
+    out = run_src(src)
+    assert out == ["5"]
+
+    # stop at 3
+    src2 = "\n".join([
+        "set x to 0",
+        "repeat 10 times",
+        "    if x = 3",
+        "        stop",
+        "    end",
+        "    change x to x + 1",
+        "end",
+        "show x",
+        "",
+    ])
+    out2 = run_src(src2)
+    assert out2 == ["3"]
+
+    # skip when x = 3
+    src3 = "\n".join([
+        "set x to 0",
+        "set c to 0",
+        "repeat 5 times",
+        "    change x to x + 1",
+        "    if x = 3",
+        "        skip",
+        "    end",
+        "    change c to c + 1",
+        "end",
+        "show c",
+        "",
+    ])
+    out3 = run_src(src3)
+    assert out3 == ["4"]
+
+def test_repeat_allows_set_each_iteration():
+    src = "\n".join([
+        "repeat 2 times",
+        "    set t to 1",
+        "end",
+        "show 0",
+        "",
+    ])
+    out = run_src(src)
+    assert out == ["0"]
