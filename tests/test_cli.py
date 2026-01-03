@@ -7,7 +7,7 @@ from rill.cli import main
 
 def test_cli_tokens_and_parse(tmp_path: Path, capsys):
     program = "set x to 2 + 3 * 4\nshow x\n"
-    path = tmp_path / "prog.rill"
+    path = (tmp_path / "prog.rill").resolve()
     path.write_text(program, encoding="utf-8")
 
     assert main(["tokens", str(path)]) == 0
