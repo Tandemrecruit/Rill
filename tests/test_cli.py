@@ -22,3 +22,7 @@ def test_cli_tokens_and_parse(tmp_path: Path, capsys):
     assert main(["parse", str(path)]) == 0
     out = capsys.readouterr().out
     assert "Program" in out
+
+    assert main(["run", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "14" in out
