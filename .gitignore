@@ -8,3 +8,4 @@ tmp.rill
 example.rill
 .vscode/
 coverage.xml
+.coverage
