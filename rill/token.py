@@ -109,9 +109,21 @@ class Token:
     type: TokenType
     lexeme: str
     literal: Any
-    line: int   # 1-based
-    col: int    # 1-based start column
+
+    # 1-based, start position
+    line: int
+    col: int
+
+    # 1-based, end position (EXCLUSIVE)
+    end_line: int
+    end_col: int
+
+    # 0-based offsets into the original source (end_index is EXCLUSIVE)
+    start_index: int
+    end_index: int
 
     def __repr__(self) -> str:
         lit = f", literal={self.literal!r}" if self.literal is not None else ""
-        return f"Token({self.type.name}, {self.lexeme!r}{lit}, line={self.line}, col={self.col})"
+        span = f"{self.line}:{self.col}-{self.end_line}:{self.end_col}"
+        idx = f"{self.start_index}-{self.end_index}"
+        return f"Token({self.type.name}, {self.lexeme!r}{lit}, span={span}, idx={idx})"

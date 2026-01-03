@@ -13,17 +13,22 @@ class Lexer:
     filename: str = "<memory>"
 
     def __post_init__(self) -> None:
-        self._i = 0
-        self._line = 1
-        self._col = 1
+        self._i = 0               # 0-based index into source
+        self._line = 1            # 1-based
+        self._col = 1             # 1-based
         self._tokens: List[Token] = []
 
     def lex(self) -> List[Token]:
         while not self._is_at_end():
             ch = self._peek()
 
+            # newline handling (supports \n and \r\n, and treats bare \r as newline)
+            if ch == "\n" or ch == "\r":
+                self._lex_newline()
+                continue
+
             # whitespace (but not newline)
-            if ch in (" ", "\t", "\r"):
+            if ch in (" ", "\t"):
                 self._advance()
                 continue
 
@@ -32,14 +37,8 @@ class Lexer:
                 self._consume_comment()
                 continue
 
-            # newline
-            if ch == "\n":
-                self._emit(TokenType.NEWLINE, "\n", None, self._line, self._col)
-                self._advance_newline()
-                continue
-
             # strings
-            if ch in ("\"", "'"):
+            if ch in ('"', "'"):
                 self._lex_string()
                 continue
 
@@ -55,21 +54,13 @@ class Lexer:
 
             # two-char operators
             if ch == "!" and self._peek_next() == "=":
-                line, col = self._line, self._col
-                self._advance(); self._advance()
-                self._emit(TokenType.NEQ, "!=", None, line, col)
+                self._lex_two_char(TokenType.NEQ)
                 continue
-
             if ch == "<" and self._peek_next() == "=":
-                line, col = self._line, self._col
-                self._advance(); self._advance()
-                self._emit(TokenType.LTE, "<=", None, line, col)
+                self._lex_two_char(TokenType.LTE)
                 continue
-
             if ch == ">" and self._peek_next() == "=":
-                line, col = self._line, self._col
-                self._advance(); self._advance()
-                self._emit(TokenType.GTE, ">=", None, line, col)
+                self._lex_two_char(TokenType.GTE)
                 continue
 
             # single-char tokens
@@ -93,23 +84,55 @@ class Lexer:
                 ".": TokenType.DOT,
             }
             if ch in single:
-                ttype = single[ch]
-                line, col = self._line, self._col
-                self._advance()
-                self._emit(ttype, ch, None, line, col)
+                self._lex_one_char(single[ch])
                 continue
 
             # unknown character
-            span = Span(self._line, self._col, self._col)
-            raise RillLexError(f"Unexpected character {ch!r}.", span)
+            raise RillLexError(
+                f"Unexpected character {ch!r}.",
+                Span(self._line, self._col, self._col),
+            )
 
-        self._emit(TokenType.EOF, "", None, self._line, self._col)
+        # EOF token at current position
+        self._emit_range(
+            TokenType.EOF,
+            start_i=self._i,
+            end_i=self._i,
+            literal=None,
+            start_line=self._line,
+            start_col=self._col,
+            end_line=self._line,
+            end_col=self._col,
+        )
         return self._tokens
 
-    # ---------- lex helpers ----------
+    # ---------- core helpers ----------
 
-    def _emit(self, ttype: TokenType, lexeme: str, literal: Optional[object], line: int, col: int) -> None:
-        self._tokens.append(Token(ttype, lexeme, literal, line, col))
+    def _emit_range(
+        self,
+        ttype: TokenType,
+        start_i: int,
+        end_i: int,
+        literal: Optional[object],
+        start_line: int,
+        start_col: int,
+        end_line: int,
+        end_col: int,
+    ) -> None:
+        lexeme = self.source[start_i:end_i]
+        self._tokens.append(
+            Token(
+                type=ttype,
+                lexeme=lexeme,
+                literal=literal,
+                line=start_line,
+                col=start_col,
+                end_line=end_line,
+                end_col=end_col,
+                start_index=start_i,
+                end_index=end_i,
+            )
+        )
 
     def _is_at_end(self) -> bool:
         return self._i >= len(self.source)
@@ -127,106 +150,208 @@ class Lexer:
         self._col += 1
         return ch
 
-    def _advance_newline(self) -> None:
-        # consumes '\n'
-        self._i += 1
+    def _advance_newline(self, length: int) -> None:
+        # consumes 1 char (\n or \r) or 2 chars (\r\n)
+        self._i += length
         self._line += 1
         self._col = 1
 
     def _consume_comment(self) -> None:
         # consume until newline or EOF (do not emit token)
-        while not self._is_at_end() and self._peek() != "\n":
+        while not self._is_at_end():
+            ch = self._peek()
+            if ch == "\n" or ch == "\r":
+                return
             self._advance()
 
+    # ---------- lexing routines ----------
+
+    def _lex_newline(self) -> None:
+        start_i = self._i
+        start_line = self._line
+        start_col = self._col
+
+        if self._peek() == "\r" and self._peek_next() == "\n":
+            self._advance_newline(2)
+        else:
+            self._advance_newline(1)
+
+        end_i = self._i
+        end_line = self._line
+        end_col = self._col
+
+        self._emit_range(
+            TokenType.NEWLINE,
+            start_i=start_i,
+            end_i=end_i,
+            literal=None,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=end_line,
+            end_col=end_col,
+        )
+
+    def _lex_one_char(self, ttype: TokenType) -> None:
+        start_i = self._i
+        start_line = self._line
+        start_col = self._col
+
+        self._advance()
+
+        self._emit_range(
+            ttype,
+            start_i=start_i,
+            end_i=self._i,
+            literal=None,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=self._line,
+            end_col=self._col,
+        )
+
+    def _lex_two_char(self, ttype: TokenType) -> None:
+        start_i = self._i
+        start_line = self._line
+        start_col = self._col
+
+        self._advance()
+        self._advance()
+
+        self._emit_range(
+            ttype,
+            start_i=start_i,
+            end_i=self._i,
+            literal=None,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=self._line,
+            end_col=self._col,
+        )
+
     def _lex_ident_or_keyword(self) -> None:
-        line, col = self._line, self._col
-        start = self._i
+        start_i = self._i
+        start_line = self._line
+        start_col = self._col
+
         while not self._is_at_end():
             ch = self._peek()
             if ch.isalnum() or ch == "_":
                 self._advance()
             else:
                 break
-        lexeme = self.source[start:self._i]
+
+        end_i = self._i
+        lexeme = self.source[start_i:end_i]
         key = lexeme.lower()
         ttype = KEYWORDS.get(key, TokenType.IDENT)
-        lit = None
+
+        literal = None
         if ttype == TokenType.TRUE:
-            lit = True
+            literal = True
         elif ttype == TokenType.FALSE:
-            lit = False
-        self._emit(ttype, lexeme, lit, line, col)
+            literal = False
+
+        self._emit_range(
+            ttype,
+            start_i=start_i,
+            end_i=end_i,
+            literal=literal,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=self._line,
+            end_col=self._col,
+        )
 
     def _lex_number(self) -> None:
-        line, col = self._line, self._col
-        start = self._i
-        # int part
+        start_i = self._i
+        start_line = self._line
+        start_col = self._col
+
         while self._peek().isdigit():
             self._advance()
+
         # optional fractional part
         if self._peek() == "." and self._peek_next().isdigit():
-            self._advance()  # consume '.'
+            self._advance()  # '.'
             while self._peek().isdigit():
                 self._advance()
-        lexeme = self.source[start:self._i]
-        # parse as int if no dot, else float
+
+        end_i = self._i
+        lexeme = self.source[start_i:end_i]
         literal = float(lexeme) if "." in lexeme else int(lexeme)
-        self._emit(TokenType.NUMBER, lexeme, literal, line, col)
+
+        self._emit_range(
+            TokenType.NUMBER,
+            start_i=start_i,
+            end_i=end_i,
+            literal=literal,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=self._line,
+            end_col=self._col,
+        )
 
     def _lex_string(self) -> None:
         quote = self._peek()
-        line, col = self._line, self._col
         start_i = self._i
-        self._advance()  # consume opening quote
-    
+        start_line = self._line
+        start_col = self._col
+
+        self._advance()  # opening quote
         chars: List[str] = []
-    
+
         while True:
             if self._is_at_end():
-                raise RillLexError("Unterminated string literal.", Span(line, col, self._col))
-    
+                raise RillLexError("Unterminated string literal.", Span(start_line, start_col, start_col))
+
             ch = self._peek()
-    
-            if ch == "\n":
-                # strings cannot contain raw newlines in v1
-                raise RillLexError("Newline in string literal. Use \\n escape or join lines.", Span(self._line, self._col, self._col))
-    
+
+            # no raw newlines inside strings in v1
+            if ch == "\n" or ch == "\r":
+                raise RillLexError(
+                    "Newline in string literal. Use \\n escape or join lines.",
+                    Span(self._line, self._col, self._col),
+                )
+
             if ch == quote:
-                self._advance()  # consume closing quote
+                self._advance()  # closing quote
                 break
-    
-            if ch == "\\":  # escape sequence
+
+            if ch == "\\":  # escape
                 esc_line, esc_col = self._line, self._col
-                self._advance()  # consume backslash
+                self._advance()  # backslash
                 esc = self._peek()
                 if esc == "\0":
                     raise RillLexError("Unterminated escape sequence in string.", Span(esc_line, esc_col, esc_col))
-    
+
                 if esc == "n":
                     chars.append("\n"); self._advance(); continue
                 if esc == "t":
                     chars.append("\t"); self._advance(); continue
                 if esc == "r":
                     chars.append("\r"); self._advance(); continue
-                if esc == "\\":  # literal backslash
+                if esc == "\\":
                     chars.append("\\"); self._advance(); continue
-                if esc == '"' and quote == '"':
+                if esc == '"':
                     chars.append('"'); self._advance(); continue
-                if esc == "'" and quote == "'":
+                if esc == "'":
                     chars.append("'"); self._advance(); continue
-    
-                # Allow escaping the other quote too (harmless and familiar)
-                if esc == '"' and quote == "'":
-                    chars.append('"'); self._advance(); continue
-                if esc == "'" and quote == '"':
-                    chars.append("'"); self._advance(); continue
-    
+
                 raise RillLexError(f"Unknown escape sequence \\{esc}.", Span(esc_line, esc_col, esc_col))
-    
-            # normal character
+
             chars.append(ch)
             self._advance()
-    
-        lexeme = self.source[start_i:self._i]  # include quotes
+
+        end_i = self._i
         literal = "".join(chars)
-        self._emit(TokenType.STRING, lexeme, literal, line, col)
+
+        self._emit_range(
+            TokenType.STRING,
+            start_i=start_i,
+            end_i=end_i,
+            literal=literal,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=self._line,
+            end_col=self._col,
+        )
