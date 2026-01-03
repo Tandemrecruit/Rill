@@ -1,0 +1,236 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional
+
+from .token import Token, TokenType
+from .ast import (
+    Program,
+    NodeSpan,
+    Expr,
+    LiteralExpr,
+    NameExpr,
+    UnaryExpr,
+    BinaryExpr,
+    GroupExpr,
+    IndexExpr,
+    Stmt,
+    ShowStmt,
+    SetStmt,
+    ChangeStmt,
+    Target,
+    NameTarget,
+    IndexTarget,
+)
+
+
+class RillParseError(Exception):
+    def __init__(self, message: str, token: Token):
+        super().__init__(f"Line {token.line}, col {token.col}: {message}")
+        self.message = message
+        self.token = token
+
+
+def span_from_tokens(start: Token, end: Token) -> NodeSpan:
+    """Create a span from the start token to the end token (inclusive)."""
+    return NodeSpan(
+        start_line=start.line,
+        start_col=start.col,
+        end_line=end.end_line,
+        end_col=end.end_col,
+        start_index=start.start_index,
+        end_index=end.end_index,
+    )
+
+
+def span_join(a: NodeSpan, b: NodeSpan) -> NodeSpan:
+    """Join two spans from a.start -> b.end."""
+    return NodeSpan(
+        start_line=a.start_line,
+        start_col=a.start_col,
+        end_line=b.end_line,
+        end_col=b.end_col,
+        start_index=a.start_index,
+        end_index=b.end_index,
+    )
+
+
+@dataclass
+class Parser:
+    tokens: List[Token]
+    filename: str = "<memory>"
+
+    def __post_init__(self) -> None:
+        self._i = 0
+
+    # ---------- entrypoint ----------
+
+    def parse(self) -> Program:
+        statements: List[Stmt] = []
+        self._consume_newlines()
+        while not self._check(TokenType.EOF):
+            statements.append(self._statement())
+            self._consume_newlines()
+        return Program(statements)
+
+    # ---------- statements ----------
+
+    def _statement(self) -> Stmt:
+        if self._match(TokenType.SHOW):
+            start = self._previous()
+            expr = self._expression()
+            return ShowStmt(expr=expr, span=span_join(span_from_tokens(start, start), expr.span))
+
+        if self._match(TokenType.SET):
+            start = self._previous()
+            name_tok = self._consume(TokenType.IDENT, "Expected a variable name after `set`.")
+            self._consume(TokenType.TO, "Expected `to` after variable name.")
+            expr = self._expression()
+            return SetStmt(name=name_tok.lexeme, expr=expr, span=span_join(span_from_tokens(start, start), expr.span))
+
+        if self._match(TokenType.CHANGE):
+            start = self._previous()
+            target = self._target()
+            self._consume(TokenType.TO, "Expected `to` after change target.")
+            expr = self._expression()
+            return ChangeStmt(target=target, expr=expr, span=span_join(span_from_tokens(start, start), expr.span))
+
+        raise RillParseError("Expected a statement (show/set/change).", self._peek())
+
+    def _target(self) -> Target:
+        # v0: IDENT or IDENT[expr]
+        name_tok = self._consume(TokenType.IDENT, "Expected a variable name after `change`.")
+        name_span = span_from_tokens(name_tok, name_tok)
+        base_expr = NameExpr(name=name_tok.lexeme, span=name_span)
+
+        if self._match(TokenType.LBRACKET):
+            idx = self._expression()
+            rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
+            return IndexTarget(collection=base_expr, index=idx, span=span_from_tokens(name_tok, rbr))
+
+        return NameTarget(name=name_tok.lexeme, span=name_span)
+
+    # ---------- expressions ----------
+
+    def _expression(self) -> Expr:
+        return self._or()
+
+    def _or(self) -> Expr:
+        expr = self._and()
+        while self._match(TokenType.OR):
+            op = self._previous()
+            right = self._and()
+            expr = BinaryExpr(left=expr, op=op.type, right=right, span=span_join(expr.span, right.span))
+        return expr
+
+    def _and(self) -> Expr:
+        expr = self._comparison()
+        while self._match(TokenType.AND):
+            op = self._previous()
+            right = self._comparison()
+            expr = BinaryExpr(left=expr, op=op.type, right=right, span=span_join(expr.span, right.span))
+        return expr
+
+    def _comparison(self) -> Expr:
+        expr = self._term()
+        while self._match(TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE):
+            op = self._previous()
+            right = self._term()
+            expr = BinaryExpr(left=expr, op=op.type, right=right, span=span_join(expr.span, right.span))
+        return expr
+
+    def _term(self) -> Expr:
+        expr = self._factor()
+        while self._match(TokenType.PLUS, TokenType.MINUS):
+            op = self._previous()
+            right = self._factor()
+            expr = BinaryExpr(left=expr, op=op.type, right=right, span=span_join(expr.span, right.span))
+        return expr
+
+    def _factor(self) -> Expr:
+        expr = self._unary()
+        while self._match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT):
+            op = self._previous()
+            right = self._unary()
+            expr = BinaryExpr(left=expr, op=op.type, right=right, span=span_join(expr.span, right.span))
+        return expr
+
+    def _unary(self) -> Expr:
+        if self._match(TokenType.NOT, TokenType.MINUS):
+            op = self._previous()
+            right = self._unary()
+            return UnaryExpr(op=op.type, right=right, span=span_join(span_from_tokens(op, op), right.span))
+        return self._postfix()
+
+    def _postfix(self) -> Expr:
+        expr = self._primary()
+        while self._match(TokenType.LBRACKET):
+            idx = self._expression()
+            rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
+            expr = IndexExpr(collection=expr, index=idx, span=span_join(expr.span, span_from_tokens(rbr, rbr)))
+        return expr
+
+    def _primary(self) -> Expr:
+        if self._match(TokenType.NUMBER):
+            t = self._previous()
+            return LiteralExpr(value=t.literal, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.STRING):
+            t = self._previous()
+            return LiteralExpr(value=t.literal, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.TRUE):
+            t = self._previous()
+            return LiteralExpr(value=True, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.FALSE):
+            t = self._previous()
+            return LiteralExpr(value=False, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.EMPTY):
+            t = self._previous()
+            return LiteralExpr(value=None, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.IDENT):
+            t = self._previous()
+            return NameExpr(name=t.lexeme, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.LPAREN):
+            lpar = self._previous()
+            expr = self._expression()
+            rpar = self._consume(TokenType.RPAREN, "Expected `)` after expression.")
+            return GroupExpr(expr=expr, span=span_from_tokens(lpar, rpar))
+
+        raise RillParseError("Expected an expression.", self._peek())
+
+    # ---------- token helpers ----------
+
+    def _consume_newlines(self) -> None:
+        while self._match(TokenType.NEWLINE):
+            pass
+
+    def _match(self, *types: TokenType) -> bool:
+        for t in types:
+            if self._check(t):
+                self._advance()
+                return True
+        return False
+
+    def _consume(self, ttype: TokenType, message: str) -> Token:
+        if self._check(ttype):
+            return self._advance()
+        raise RillParseError(message, self._peek())
+
+    def _check(self, ttype: TokenType) -> bool:
+        return self._peek().type == ttype
+
+    def _advance(self) -> Token:
+        if self._peek().type != TokenType.EOF:
+            self._i += 1
+        return self._previous()
+
+    def _peek(self) -> Token:
+        return self.tokens[self._i]
+
+    def _previous(self) -> Token:
+        return self.tokens[self._i - 1]
