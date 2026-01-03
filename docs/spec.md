@@ -41,7 +41,7 @@ Programs can run in three modes:
 ### 3.1 Statements and whitespace
 - One statement per line.
 - Newline ends a statement.
-- Indentation is required for nested blocks.
+- Indentation is recommened for readability; blocks are delimited by `end` (v0), may be enforced later.
 
 ### 3.2 Blocks (**`end` is required**)
 Blocks begin with a header line and end with a matching `end`.

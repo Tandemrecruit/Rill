@@ -20,6 +20,8 @@ class TokenType(Enum):
     IF = auto()
     OTHERWISE = auto()
     REPEAT = auto()
+    WHILE = auto()
+    TIMES = auto()
     FOR = auto()
     EACH = auto()
     DEFINE = auto()
@@ -76,6 +78,8 @@ KEYWORDS = {
     "if": TokenType.IF,
     "otherwise": TokenType.OTHERWISE,
     "repeat": TokenType.REPEAT,
+    "while": TokenType.WHILE,
+    "times": TokenType.TIMES,
     "for": TokenType.FOR,
     "each": TokenType.EACH,
     "define": TokenType.DEFINE,

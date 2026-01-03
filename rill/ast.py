@@ -113,5 +113,43 @@ class ChangeStmt(Stmt):
 
 
 @dataclass(frozen=True)
+class StopStmt(Stmt):
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class SkipStmt(Stmt):
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class IfBranch:
+    condition: Expr
+    body: List[Stmt]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class IfStmt(Stmt):
+    branches: List[IfBranch]
+    else_body: Optional[List[Stmt]]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class RepeatTimesStmt(Stmt):
+    count: Expr
+    body: List[Stmt]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class RepeatWhileStmt(Stmt):
+    condition: Expr
+    body: List[Stmt]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
 class Program:
     statements: List[Stmt]

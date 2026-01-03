@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, List
 
 from .ast import (
     Program,
@@ -9,6 +9,12 @@ from .ast import (
     ShowStmt,
     SetStmt,
     ChangeStmt,
+    StopStmt,
+    SkipStmt,
+    IfStmt,
+    IfBranch,
+    RepeatTimesStmt,
+    RepeatWhileStmt,
     Expr,
     LiteralExpr,
     NameExpr,
@@ -24,6 +30,14 @@ from .token import TokenType
 from .runtime import Environment, RillRuntimeError, to_rill_string
 
 
+class _StopLoop(Exception):
+    pass
+
+
+class _SkipLoop(Exception):
+    pass
+
+
 @dataclass
 class Interpreter:
     output: Callable[[str], None]
@@ -32,6 +46,7 @@ class Interpreter:
     def __init__(self, output: Optional[Callable[[str], None]] = None, env: Optional[Environment] = None) -> None:
         self.output = output or (lambda s: print(s))
         self.env = env or Environment()
+        self._loop_depth = 0
 
     def run(self, program: Program) -> None:
         for stmt in program.statements:
@@ -55,7 +70,109 @@ class Interpreter:
             self._assign_target(stmt.target, val)
             return
 
+        if isinstance(stmt, StopStmt):
+            if self._loop_depth <= 0:
+                raise RillRuntimeError("`stop` can only be used inside a repeat loop.", stmt.span)
+            raise _StopLoop()
+
+        if isinstance(stmt, SkipStmt):
+            if self._loop_depth <= 0:
+                raise RillRuntimeError("`skip` can only be used inside a repeat loop.", stmt.span)
+            raise _SkipLoop()
+
+        if isinstance(stmt, IfStmt):
+            self._exec_if(stmt)
+            return
+
+        if isinstance(stmt, RepeatTimesStmt):
+            self._exec_repeat_times(stmt)
+            return
+
+        if isinstance(stmt, RepeatWhileStmt):
+            self._exec_repeat_while(stmt)
+            return
+
         raise RillRuntimeError(f"Unsupported statement type: {type(stmt).__name__}", getattr(stmt, "span", None))
+
+    def _exec_if(self, stmt: IfStmt) -> None:
+        for br in stmt.branches:
+            cond_val = self._eval_expr(br.condition)
+            if not isinstance(cond_val, bool):
+                raise RillRuntimeError("`if` condition must be true/false.", br.condition.span)
+            if cond_val:
+                self.env.push_scope()
+                try:
+                    for s in br.body:
+                        self._exec_stmt(s)
+                finally:
+                    self.env.pop_scope()
+                return
+
+        if stmt.else_body is not None:
+            self.env.push_scope()
+            try:
+                for s in stmt.else_body:
+                    self._exec_stmt(s)
+            finally:
+                self.env.pop_scope()
+
+    def _as_nonneg_int(self, value: Any, span) -> int:
+        if isinstance(value, bool):
+            raise RillRuntimeError("Expected a number.", span)
+        if isinstance(value, int):
+            n = value
+        elif isinstance(value, float) and value.is_integer():
+            n = int(value)
+        else:
+            raise RillRuntimeError("Repeat count must be a whole number.", span)
+        if n < 0:
+            raise RillRuntimeError("Repeat count cannot be negative.", span)
+        return n
+
+    def _exec_repeat_times(self, stmt: RepeatTimesStmt) -> None:
+        count_val = self._eval_expr(stmt.count)
+        n = self._as_nonneg_int(count_val, stmt.count.span)
+
+        self._loop_depth += 1
+        try:
+            for _ in range(n):
+                self.env.push_scope()
+                try:
+                    try:
+                        for s in stmt.body:
+                            self._exec_stmt(s)
+                    except _SkipLoop:
+                        continue
+                    except _StopLoop:
+                        break
+                finally:
+                    self.env.pop_scope()
+        finally:
+            self._loop_depth -= 1
+
+    def _exec_repeat_while(self, stmt: RepeatWhileStmt) -> None:
+        self._loop_depth += 1
+        try:
+            while True:
+                cond_val = self._eval_expr(stmt.condition)
+                if not isinstance(cond_val, bool):
+                    raise RillRuntimeError("`repeat while` condition must be true/false.", stmt.condition.span)
+                if not cond_val:
+                    break
+
+                self.env.push_scope()
+                try:
+                    try:
+                        for s in stmt.body:
+                            self._exec_stmt(s)
+                    except _SkipLoop:
+                        pass
+                    except _StopLoop:
+                        break
+                finally:
+                    self.env.pop_scope()
+        finally:
+            self._loop_depth -= 1
 
     def _assign_target(self, target: Target, value: Any) -> None:
         if isinstance(target, NameTarget):

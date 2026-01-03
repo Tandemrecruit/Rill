@@ -1,0 +1,9 @@
+﻿set x to 0
+repeat 5 times
+    change x to x + 1
+end
+if x = 5
+    show "ok"
+otherwise
+    show "bad"
+end

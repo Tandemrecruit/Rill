@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .ast import NodeSpan
 
@@ -18,25 +18,43 @@ class RillRuntimeError(Exception):
 
 @dataclass
 class Environment:
-    values: Dict[str, Any]
+    """Lexical environment with block scopes.
+
+    - `set` defines in the *current* scope only.
+    - `change` updates the nearest existing name walking outward.
+    """
+    scopes: List[Dict[str, Any]]
 
     def __init__(self) -> None:
-        self.values = {}
+        self.scopes = [{}]  # global scope
+
+    def push_scope(self) -> None:
+        self.scopes.append({})
+
+    def pop_scope(self) -> None:
+        if len(self.scopes) <= 1:
+            # never pop the global scope
+            return
+        self.scopes.pop()
 
     def define(self, name: str, value: Any, span: Optional[NodeSpan] = None) -> None:
-        if name in self.values:
-            raise RillRuntimeError(f"Cannot `set` `{name}` because it already exists. Use `change` to update.", span)
-        self.values[name] = value
+        current = self.scopes[-1]
+        if name in current:
+            raise RillRuntimeError(f"Cannot `set` `{name}` because it already exists in this block. Use `change`.", span)
+        current[name] = value
 
     def assign(self, name: str, value: Any, span: Optional[NodeSpan] = None) -> None:
-        if name not in self.values:
-            raise RillRuntimeError(f"Cannot `change` `{name}` because it does not exist. Use `set` to create it first.", span)
-        self.values[name] = value
+        for scope in reversed(self.scopes):
+            if name in scope:
+                scope[name] = value
+                return
+        raise RillRuntimeError(f"Cannot `change` `{name}` because it does not exist. Use `set` first.", span)
 
     def get(self, name: str, span: Optional[NodeSpan] = None) -> Any:
-        if name not in self.values:
-            raise RillRuntimeError(f"Unknown name `{name}`.", span)
-        return self.values[name]
+        for scope in reversed(self.scopes):
+            if name in scope:
+                return scope[name]
+        raise RillRuntimeError(f"Unknown name `{name}`.", span)
 
 
 def to_rill_string(value: Any) -> str:

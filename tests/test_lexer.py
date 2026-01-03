@@ -66,3 +66,12 @@ def test_token_lexeme_matches_source_slice():
 def test_unterminated_string_raises():
     with pytest.raises(Exception):
         Lexer("set a to \"oops\n").lex()
+
+
+def test_while_and_times_keywords():
+    src = "repeat 3 times\nrepeat while true\n"
+    ts = Lexer(src).lex()
+    types = [t.type for t in ts]
+    assert TokenType.REPEAT in types
+    assert TokenType.TIMES in types
+    assert TokenType.WHILE in types

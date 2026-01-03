@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from .token import Token, TokenType
 from .ast import (
@@ -14,13 +14,19 @@ from .ast import (
     BinaryExpr,
     GroupExpr,
     IndexExpr,
+    Target,
+    NameTarget,
+    IndexTarget,
     Stmt,
     ShowStmt,
     SetStmt,
     ChangeStmt,
-    Target,
-    NameTarget,
-    IndexTarget,
+    StopStmt,
+    SkipStmt,
+    IfBranch,
+    IfStmt,
+    RepeatTimesStmt,
+    RepeatWhileStmt,
 )
 
 
@@ -95,7 +101,79 @@ class Parser:
             expr = self._expression()
             return ChangeStmt(target=target, expr=expr, span=span_join(span_from_tokens(start, start), expr.span))
 
-        raise RillParseError("Expected a statement (show/set/change).", self._peek())
+        if self._match(TokenType.STOP):
+            t = self._previous()
+            return StopStmt(span=span_from_tokens(t, t))
+
+        if self._match(TokenType.SKIP):
+            t = self._previous()
+            return SkipStmt(span=span_from_tokens(t, t))
+
+        if self._match(TokenType.IF):
+            return self._if_statement(self._previous())
+
+        if self._match(TokenType.REPEAT):
+            return self._repeat_statement(self._previous())
+
+        raise self._error(self._peek(), "Expected a statement (show/set/change/if/repeat).")
+
+    def _require_newline(self, message: str) -> Token:
+        if self._match(TokenType.NEWLINE):
+            return self._previous()
+        raise self._error(self._peek(), message)
+
+    def _block(self, until: Set[TokenType]) -> List[Stmt]:
+        """Parse statements until one of `until` is encountered (not consumed)."""
+        statements: List[Stmt] = []
+        self._consume_newlines()
+        while not self._check(TokenType.EOF) and not self._check_any(until):
+            statements.append(self._statement())
+            self._consume_newlines()
+        return statements
+
+    def _if_statement(self, if_tok: Token) -> IfStmt:
+        # if <expr> NEWLINE <block> (otherwise if <expr> NEWLINE <block>)* (otherwise NEWLINE <block>)? end
+        branches: List[IfBranch] = []
+        else_body: Optional[List[Stmt]] = None
+
+        cond = self._expression()
+        self._require_newline("Expected a newline after the `if` condition.")
+        then_body = self._block({TokenType.OTHERWISE, TokenType.END})
+        branches.append(IfBranch(condition=cond, body=then_body, span=span_join(cond.span, then_body[-1].span) if then_body else cond.span))
+
+        while self._match(TokenType.OTHERWISE):
+            other_tok = self._previous()
+            if self._match(TokenType.IF):
+                cond2 = self._expression()
+                self._require_newline("Expected a newline after the `otherwise if` condition.")
+                body2 = self._block({TokenType.OTHERWISE, TokenType.END})
+                branches.append(IfBranch(condition=cond2, body=body2, span=span_join(cond2.span, body2[-1].span) if body2 else cond2.span))
+                continue
+
+            # plain otherwise
+            self._require_newline("Expected a newline after `otherwise`.")
+            else_body = self._block({TokenType.END})
+            break
+
+        end_tok = self._consume(TokenType.END, "Expected `end` to close the `if` block.")
+        return IfStmt(branches=branches, else_body=else_body, span=span_from_tokens(if_tok, end_tok))
+
+    def _repeat_statement(self, repeat_tok: Token) -> Stmt:
+        # repeat while <expr> NEWLINE <block> end
+        # repeat <expr> times NEWLINE <block> end
+        if self._match(TokenType.WHILE):
+            cond = self._expression()
+            self._require_newline("Expected a newline after the `repeat while` condition.")
+            body = self._block({TokenType.END})
+            end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
+            return RepeatWhileStmt(condition=cond, body=body, span=span_from_tokens(repeat_tok, end_tok))
+
+        count = self._expression()
+        self._consume(TokenType.TIMES, "Expected `times` after repeat count.")
+        self._require_newline("Expected a newline after `repeat ... times`.")
+        body = self._block({TokenType.END})
+        end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
+        return RepeatTimesStmt(count=count, body=body, span=span_from_tokens(repeat_tok, end_tok))
 
     def _target(self) -> Target:
         # v0: IDENT or IDENT[expr]
@@ -164,10 +242,14 @@ class Parser:
 
     def _postfix(self) -> Expr:
         expr = self._primary()
-        while self._match(TokenType.LBRACKET):
-            idx = self._expression()
-            rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
-            expr = IndexExpr(collection=expr, index=idx, span=span_join(expr.span, span_from_tokens(rbr, rbr)))
+        while True:
+            if self._match(TokenType.LBRACKET):
+                lbr = self._previous()
+                idx = self._expression()
+                rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
+                expr = IndexExpr(collection=expr, index=idx, span=span_from_tokens(lbr, rbr))
+                continue
+            break
         return expr
 
     def _primary(self) -> Expr:
@@ -201,9 +283,9 @@ class Parser:
             rpar = self._consume(TokenType.RPAREN, "Expected `)` after expression.")
             return GroupExpr(expr=expr, span=span_from_tokens(lpar, rpar))
 
-        raise RillParseError("Expected an expression.", self._peek())
+        raise self._error(self._peek(), "Expected an expression.")
 
-    # ---------- token helpers ----------
+    # ---------- utilities ----------
 
     def _consume_newlines(self) -> None:
         while self._match(TokenType.NEWLINE):
@@ -219,18 +301,31 @@ class Parser:
     def _consume(self, ttype: TokenType, message: str) -> Token:
         if self._check(ttype):
             return self._advance()
-        raise RillParseError(message, self._peek())
+        raise self._error(self._peek(), message)
 
     def _check(self, ttype: TokenType) -> bool:
+        if self._is_at_end():
+            return ttype == TokenType.EOF
         return self._peek().type == ttype
 
+    def _check_any(self, types: Set[TokenType]) -> bool:
+        if self._is_at_end():
+            return TokenType.EOF in types
+        return self._peek().type in types
+
     def _advance(self) -> Token:
-        if self._peek().type != TokenType.EOF:
+        if not self._is_at_end():
             self._i += 1
         return self._previous()
+
+    def _is_at_end(self) -> bool:
+        return self._peek().type == TokenType.EOF
 
     def _peek(self) -> Token:
         return self.tokens[self._i]
 
     def _previous(self) -> Token:
         return self.tokens[self._i - 1]
+
+    def _error(self, token: Token, message: str) -> RillParseError:
+        return RillParseError(message, token)
