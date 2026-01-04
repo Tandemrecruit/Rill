@@ -32,7 +32,12 @@ from .ast import (
 
 
 def span_from_tokens(start: Token, end: Token) -> NodeSpan:
-    """Create a span from the start token to the end token (inclusive)."""
+    """
+    Create a NodeSpan covering the range from the `start` token to the `end` token, inclusive.
+    
+    Returns:
+        NodeSpan: Span whose start line/column and start index are taken from `start`, and whose end line/column and end index are taken from `end`.
+    """
     return NodeSpan(
         start_line=start.line,
         start_col=start.col,
@@ -127,6 +132,20 @@ class Parser:
 
     def _if_statement(self, if_tok: Token) -> IfStmt:
         # if <expr> NEWLINE <block> (otherwise if <expr> NEWLINE <block>)* (otherwise NEWLINE <block>)? end
+        """
+        Parse an if/otherwise/end construct and produce the corresponding IfStmt AST node.
+        
+        Parses an initial `if` condition and its then-block, followed by zero or more `otherwise if` branches and an optional plain `otherwise` block, and consumes the closing `end` token. Each branch's span covers its condition through the last statement of its body when a body is present.
+        
+        Parameters:
+            if_tok (Token): The `IF` token that starts the construct; used to form the overall span of the resulting IfStmt.
+        
+        Returns:
+            IfStmt: An AST node containing the list of IfBranch entries, an optional else_body list of statements, and a span from `if_tok` to the closing `end` token.
+        
+        Raises:
+            RillParseError: On syntax errors such as a missing newline after the `if` / `otherwise if` condition, a missing newline after a plain `otherwise`, or a missing closing `end`.
+        """
         branches: List[IfBranch] = []
         else_body: Optional[List[Stmt]] = None
 
