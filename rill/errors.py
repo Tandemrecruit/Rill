@@ -91,13 +91,13 @@ def format_rill_error(source: str, filename: str, error: Exception) -> str:
     header = f"{filename}:{span.start_line}:{span.start_col}: {error.__class__.__name__}: {message}"
     info = _line_and_caret(source, span)
     if info.text:
-        return "\n".join([header, info.text, info.caret])
+        return f"{header}\n{info.text}\n{info.caret}"
     return header
 
 class RillError(Exception):
     """Base error type for Rill with optional span."""
 
-    def __init__(self, message: str, span: Optional[NodeSpan] = None):
+    def __init__(self, message: str, span: Optional[NodeSpan] = None) -> None:
         """
         Initialize a RillError with a human-readable message and optional source span.
         
@@ -121,7 +121,7 @@ class RillLexError(RillError):
 
     
 class RillParseError(RillError):
-    def __init__(self, message: str, token: Token):
+    def __init__(self, message: str, token: Token) -> None:
         """
         Initialize a parse error with a message and a token-defined source span.
         

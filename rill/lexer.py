@@ -106,9 +106,9 @@ class Lexer:
                     start_line=self._line,
                     start_col=self._col,
                     end_line=self._line,
-                    end_col=self._col,
+                    end_col=self._col + 1,
                     start_index=self._i,
-                    end_index=self._i,
+                    end_index=self._i + 1,
                 ),
             )
 
@@ -338,7 +338,7 @@ class Lexer:
                         start_line=start_line,
                         start_col=start_col,
                         end_line=start_line,
-                        end_col=start_col +1,
+                        end_col=start_col + 1,
                         start_index=start_i,
                         end_index=start_i + 1,
                     ),

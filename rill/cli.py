@@ -12,39 +12,13 @@ from .parser import Parser, RillParseError
 
 
 def _read_source(path: Path) -> str:
-    """
-    Read UTF-8 source text from the given file path, skipping a leading BOM if present.
-    
-    Parameters:
-        path (Path): Path to the source file.
-    
-    Returns:
-        source (str): File contents decoded as UTF-8 with any UTF-8 BOM removed.
-    """
     return path.read_text(encoding="utf-8-sig")
 
 def _print_error(source: str, filename: str, error: Exception) -> None:
-    """
-    Format and print a Rill diagnostic for an error found in the given source.
-    
-    Parameters:
-        source (str): The source text in which the error occurred; used to show context and locations.
-        filename (str): The path or name of the source file to display in the diagnostic.
-        error (Exception): The error to format and print (e.g., lexer, parser, or runtime error).
-    """
     print(format_rill_error(source, filename, error))
 
 
 def _cmd_tokens(path: Path) -> int:
-    """
-    Lex and print all tokens from the Rill source file at the given path.
-    
-    Parameters:
-        path (Path): Filesystem path to the .rill source file to lex.
-    
-    Returns:
-        int: Exit code — `0` on success, `1` if a lexing error occurred.
-    """
     src = _read_source(path)
     try:
         tokens = Lexer(src, filename=str(path)).lex()
@@ -58,20 +32,11 @@ def _cmd_tokens(path: Path) -> int:
 
 
 def _cmd_parse(path: Path) -> int:
-    """
-    Parse a Rill source file and print its AST.
-    
-    Parameters:
-        path (Path): Path to the Rill source file to parse.
-    
-    Returns:
-        int: Exit code: `0` on successful parse and print, `1` if a lexing or parsing error occurred (error details are printed).
-    """
     src = _read_source(path)
     try:
         tokens = Lexer(src, filename=str(path)).lex()
     except RillLexError as e:
-        print(str(e))
+        _print_error(src, str(path), e)
         return 1
 
     try:
@@ -85,14 +50,6 @@ def _cmd_parse(path: Path) -> int:
     return 0
 
 def _cmd_run(path: Path) -> int:
-    """
-    Execute the Rill program at the given filesystem path.
-    
-    Reads the source file, lexes and parses it, and runs the resulting program. If a lexing, parsing, or runtime error occurs, a formatted error message is printed and the command returns a non-zero exit status.
-    
-    Returns:
-        int: `0` on successful execution, `1` if a lexing, parsing, or runtime error occurred.
-    """
     src = _read_source(path)
     try:
         tokens = Lexer(src, filename=str(path)).lex()
@@ -104,19 +61,12 @@ def _cmd_run(path: Path) -> int:
         return 1
 
 def main(argv: list[str] | None = None) -> int:
-    """
-    Command-line entry point for the Rill CLI.
-    
-    Parses command-line arguments and dispatches to the `tokens`, `parse`, or `run` subcommands.
-    Supports the shorthand form `rill <file>` which is treated as `rill tokens <file>` for backward compatibility.
-    
-    Parameters:
-        argv (list[str] | None): Arguments to parse (excluding the program name). If None, uses sys.argv[1:].
-            If the first argument is not a flag and not one of the subcommands (`tokens`, `parse`, `run`),
-            it is treated as a file path and the invocation is handled as the `tokens` command.
-    
-    Returns:
-        int: Exit status code: `0` on success; `1` for lexing/parsing/runtime errors; `2` for unknown command or argument parsing failure.
+    """Rill CLI.
+
+    Supported forms:
+      - rill <file>                (defaults to `tokens`)
+      - rill tokens <file>
+      - rill parse <file>
     """
 
     if argv is None:
