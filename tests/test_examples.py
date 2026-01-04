@@ -26,12 +26,16 @@ def test_examples_match_expected_output() -> None:
         assert expected_file.exists(), f"Missing expected output file: {expected_file.name}"
 
         expected = _norm(expected_file.read_text(encoding="utf-8-sig"))
-        proc = subprocess.run(
-            [sys.executable, "-m", "rill", "run", str(program)],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "rill", "run", str(program)],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            raise AssertionError(f"{program.name} timed out after 30 seconds")
 
         assert proc.returncode == 0, (
             f"{program.name} failed\n"
