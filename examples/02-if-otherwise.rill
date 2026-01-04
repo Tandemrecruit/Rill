@@ -1,0 +1,7 @@
+set x to 5
+
+if x >= 5 and not (x=6)
+    show "pass"
+otherwise
+    show "fail"
+end

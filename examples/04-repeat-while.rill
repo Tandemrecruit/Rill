@@ -1,0 +1,6 @@
+set x to 0
+
+repeat while x < 3
+    change x to x + 1
+    show x
+end
