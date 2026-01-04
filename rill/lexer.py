@@ -20,6 +20,17 @@ class Lexer:
         self._tokens: List[Token] = []
 
     def lex(self) -> List[Token]:
+        """
+        Tokenizes the lexer's source into a sequence of Token objects.
+        
+        Processes the input string from the current position until end-of-file, emitting tokens for newlines, whitespace-separated symbols, comments (skipped), strings, numbers, identifiers/keywords, two-character operators, and single-character tokens. Always emits a terminating EOF token at the current position.
+        
+        Returns:
+            List[Token]: A list of tokens produced from the source, including a final EOF token.
+        
+        Raises:
+            RillLexError: If an unexpected character or other lexing error (e.g., unterminated string or invalid escape) is encountered; the error includes a NodeSpan locating the problem.
+        """
         while not self._is_at_end():
             ch = self._peek()
 
@@ -300,6 +311,17 @@ class Lexer:
         )
 
     def _lex_string(self) -> None:
+        """
+        Lexes a string literal from the current source position and emits a STRING token.
+        
+        Parses characters between matching single or double quotes, interprets standard escapes (`\n`, `\t`, `\r`, `\\`, `\"`, `\'`), and records the resulting string as the token literal. Emits a token whose span covers the opening quote through the closing quote.
+        
+        Raises:
+            RillLexError: If the string is not terminated before EOF.
+            RillLexError: If a raw newline is encountered inside the string.
+            RillLexError: If an escape sequence is unterminated (EOF immediately after backslash).
+            RillLexError: If an unknown escape sequence is encountered.
+        """
         quote = self._peek()
         start_i = self._i
         start_line = self._line
