@@ -55,10 +55,11 @@ def _cmd_run(path: Path) -> int:
         tokens = Lexer(src, filename=str(path)).lex()
         program = Parser(tokens, filename=str(path)).parse()
         Interpreter().run(program)
-        return 0
     except (RillLexError, RillParseError, RillRuntimeError) as e:
         _print_error(src, str(path), e)
         return 1
+    else:
+        return 0
 
 def main(argv: list[str] | None = None) -> int:
     """Rill CLI.

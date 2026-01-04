@@ -172,7 +172,7 @@ class Parser:
 
             # plain otherwise
             if not self._match(TokenType.NEWLINE):
-                raise self._error(other_tok, "Expected a newline after `otherwise`.")
+                raise self._error(self.peek(), "Expected a newline after `otherwise`.")
             else_body = self._block({TokenType.END})
             break
 
