@@ -5,15 +5,8 @@ from typing import Any, Dict, List, Optional
 
 from .ast import NodeSpan
 
+from .errors import RillRuntimeError
 
-class RillRuntimeError(Exception):
-    def __init__(self, message: str, span: Optional[NodeSpan] = None):
-        if span is not None:
-            super().__init__(f"Line {span.start_line}, col {span.start_col}: {message}")
-        else:
-            super().__init__(message)
-        self.message = message
-        self.span = span
 
 
 @dataclass
