@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Set
 
 from .token import Token, TokenType
+from .errors import RillParseError
 from .ast import (
     Program,
     NodeSpan,
@@ -28,13 +29,6 @@ from .ast import (
     RepeatTimesStmt,
     RepeatWhileStmt,
 )
-
-
-class RillParseError(Exception):
-    def __init__(self, message: str, token: Token):
-        super().__init__(f"Line {token.line}, col {token.col}: {message}")
-        self.message = message
-        self.token = token
 
 
 def span_from_tokens(start: Token, end: Token) -> NodeSpan:
@@ -143,17 +137,26 @@ class Parser:
 
         while self._match(TokenType.OTHERWISE):
             other_tok = self._previous()
+
             if self._match(TokenType.IF):
                 cond2 = self._expression()
                 self._require_newline("Expected a newline after the `otherwise if` condition.")
                 body2 = self._block({TokenType.OTHERWISE, TokenType.END})
-                branches.append(IfBranch(condition=cond2, body=body2, span=span_join(cond2.span, body2[-1].span) if body2 else cond2.span))
+                branches.append(
+                    IfBranch(
+                        condition=cond2,
+                        body=body2,
+                        span=span_join(cond2.span, body2[-1].span) if body2 else cond2.span,
+                    )
+                )
                 continue
 
             # plain otherwise
-            self._require_newline("Expected a newline after `otherwise`.")
+            if not self._match(TokenType.NEWLINE):
+                raise self._error(other_tok, "Expected a newline after `otherwise`.")
             else_body = self._block({TokenType.END})
             break
+
 
         end_tok = self._consume(TokenType.END, "Expected `end` to close the `if` block.")
         return IfStmt(branches=branches, else_body=else_body, span=span_from_tokens(if_tok, end_tok))

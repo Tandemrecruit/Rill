@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .errors import RillLexError, Span
+from .ast import NodeSpan
+from .errors import RillLexError
 from .token import Token, TokenType, KEYWORDS
 
 
@@ -90,7 +91,14 @@ class Lexer:
             # unknown character
             raise RillLexError(
                 f"Unexpected character {ch!r}.",
-                Span(self._line, self._col, self._col),
+                NodeSpan(
+                    start_line=self._line,
+                    start_col=self._col,
+                    end_line=self._line,
+                    end_col=self._col,
+                    start_index=self._i,
+                    end_index=self._i,
+                ),
             )
 
         # EOF token at current position
@@ -302,7 +310,17 @@ class Lexer:
 
         while True:
             if self._is_at_end():
-                raise RillLexError("Unterminated string literal.", Span(start_line, start_col, start_col))
+                raise RillLexError(
+                    "Unterminated string literal.",
+                    NodeSpan(
+                        start_line=start_line,
+                        start_col=start_col,
+                        end_line=start_line,
+                        end_col=start_col +1,
+                        start_index=start_i,
+                        end_index=start_i + 1,
+                    ),
+                )
 
             ch = self._peek()
 
@@ -310,7 +328,14 @@ class Lexer:
             if ch == "\n" or ch == "\r":
                 raise RillLexError(
                     "Newline in string literal. Use \\n escape or join lines.",
-                    Span(self._line, self._col, self._col),
+                    NodeSpan(
+                        start_line=self._line,
+                        start_col=self._col,
+                        end_line=self._line,
+                        end_col=self._col + 1,
+                        start_index=self._i,
+                        end_index=min(len(self.source), self._i + 1),
+                    ),
                 )
 
             if ch == quote:
@@ -318,11 +343,21 @@ class Lexer:
                 break
 
             if ch == "\\":  # escape
-                esc_line, esc_col = self._line, self._col
+                esc_line, esc_col, esc_i = self._line, self._col, self._i
                 self._advance()  # backslash
                 esc = self._peek()
                 if esc == "\0":
-                    raise RillLexError("Unterminated escape sequence in string.", Span(esc_line, esc_col, esc_col))
+                    raise RillLexError(
+                        "Unterminated escape sequence in string.",
+                        NodeSpan(
+                            start_line=esc_line,
+                            start_col=esc_col,
+                            end_line=esc_line,
+                            end_col=esc_col + 1,
+                            start_index=esc_i,
+                            end_index=min(len(self.source), esc_i + 1),
+                        ),
+                    )
 
                 if esc == "n":
                     chars.append("\n")
@@ -349,7 +384,17 @@ class Lexer:
                     self._advance() 
                     continue
 
-                raise RillLexError(f"Unknown escape sequence \\{esc}.", Span(esc_line, esc_col, esc_col))
+                raise RillLexError(
+                    f"Unknown escape sequence \\\\{esc}.",
+                    NodeSpan(
+                        start_line=esc_line,
+                        start_col=esc_col,
+                        end_line=esc_line,
+                        end_col=esc_col + 1,
+                        start_index=esc_i,
+                        end_index=min(len(self.source), esc_i + 1),
+                    ),
+                )
 
             chars.append(ch)
             self._advance()

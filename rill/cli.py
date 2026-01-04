@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .errors import RillLexError
+from .errors import RillLexError, format_rill_error
 from .lexer import Lexer
 from .parser import Parser, RillParseError
 
@@ -14,13 +14,16 @@ from .parser import Parser, RillParseError
 def _read_source(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
+def _print_error(source: str, filename: str, error: Exception) -> None:
+    print(format_rill_error(source, filename, error))
+
 
 def _cmd_tokens(path: Path) -> int:
     src = _read_source(path)
     try:
         tokens = Lexer(src, filename=str(path)).lex()
     except RillLexError as e:
-        print(str(e))
+        _print_error(src, str(path), e)
         return 1
 
     for t in tokens:
@@ -39,7 +42,7 @@ def _cmd_parse(path: Path) -> int:
     try:
         program = Parser(tokens, filename=str(path)).parse()
     except RillParseError as e:
-        print(str(e))
+        _print_error(src, str(path), e)
         return 1
 
     # v0: rely on dataclass repr for now
@@ -54,7 +57,7 @@ def _cmd_run(path: Path) -> int:
         Interpreter().run(program)
         return 0
     except (RillLexError, RillParseError, RillRuntimeError) as e:
-        print(str(e))
+        _print_error(src, str(path), e)
         return 1
 
 def main(argv: list[str] | None = None) -> int:
