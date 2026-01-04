@@ -1,14 +1,13 @@
 from __future__ import annotations
-from .interpreter import Interpreter
-from .runtime import RillRuntimeError
 
 import argparse
 import sys
 from pathlib import Path
 
-from .errors import RillLexError, format_rill_error
+from .errors import RillLexError, RillParseError, RillRuntimeError, format_rill_error
+from .interpreter import Interpreter
 from .lexer import Lexer
-from .parser import Parser, RillParseError
+from .parser import Parser
 
 
 def _read_source(path: Path) -> str:
