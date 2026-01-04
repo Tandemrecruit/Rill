@@ -85,7 +85,7 @@ def format_rill_error(source: str, filename: str, error: Exception) -> str:
     span = getattr(error, "span", None)
 
     if not isinstance(span, NodeSpan):
-        #Fall back to whatever the exception already formats.
+        # Fall back to whatever the exception already formats.
         return str(error)
 
     header = f"{filename}:{span.start_line}:{span.start_col}: {error.__class__.__name__}: {message}"

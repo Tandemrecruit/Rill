@@ -15,7 +15,7 @@ def _read_source(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 def _print_error(source: str, filename: str, error: Exception) -> None:
-    print(format_rill_error(source, filename, error))
+    print(format_rill_error(source, filename, error), file=sys.stderr)
 
 
 def _cmd_tokens(path: Path) -> int:
