@@ -67,6 +67,27 @@ class IndexExpr(Expr):
     span: NodeSpan
 
 
+@dataclass(frozen=True)
+class CallArg:
+    name: Optional[str]  # None for positional arg
+    value: Expr
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class CallExpr(Expr):
+    callee: Expr
+    args: List[CallArg]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class Param:
+    name: str
+    default: Optional[Expr]
+    span: NodeSpan
+
+
 # ---------- Assignment Targets ----------
 
 class Target:
@@ -89,6 +110,20 @@ class IndexTarget(Target):
 # ---------- Statements ----------
 
 class Stmt:
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class DefineStmt(Stmt):
+    name: str
+    params: List[Param]
+    body: List[Stmt]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class GiveBackStmt(Stmt):
+    expr: Optional[Expr]
     span: NodeSpan
 
 

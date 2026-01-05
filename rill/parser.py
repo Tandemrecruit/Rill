@@ -15,6 +15,9 @@ from .ast import (
     BinaryExpr,
     GroupExpr,
     IndexExpr,
+    CallExpr,
+    CallArg,
+    Param,
     Target,
     NameTarget,
     IndexTarget,
@@ -24,6 +27,8 @@ from .ast import (
     ChangeStmt,
     StopStmt,
     SkipStmt,
+    DefineStmt,
+    GiveBackStmt,
     IfBranch,
     IfStmt,
     RepeatTimesStmt,
@@ -114,7 +119,13 @@ class Parser:
         if self._match(TokenType.REPEAT):
             return self._repeat_statement(self._previous())
 
-        raise self._error(self._peek(), "Expected a statement (show/set/change/if/repeat).")
+        if self._match(TokenType.DEFINE):
+            return self._define_statement(self._previous())
+
+        if self._match(TokenType.GIVE):
+            return self._give_back_statement(self._previous())
+
+        raise self._error(self._peek(), "Expected a statement (show/set/change/if/repeat/define/give back).")
 
     def _require_newline(self, message: str) -> Token:
         if self._match(TokenType.NEWLINE):
@@ -172,7 +183,7 @@ class Parser:
 
             # plain otherwise
             if not self._match(TokenType.NEWLINE):
-                raise self._error(self.peek(), "Expected a newline after `otherwise`.")
+                raise self._error(self._peek(), "Expected a newline after `otherwise`.")
             else_body = self._block({TokenType.END})
             break
 
@@ -196,6 +207,45 @@ class Parser:
         body = self._block({TokenType.END})
         end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
         return RepeatTimesStmt(count=count, body=body, span=span_from_tokens(repeat_tok, end_tok))
+
+
+    def _define_statement(self, define_tok: Token) -> DefineStmt:
+        # define <name> (taking <param>(, <param>)*)? NEWLINE <block> end
+        name_tok = self._consume(TokenType.IDENT, "Expected a function name after `define`.")
+        params: List[Param] = []
+
+        if self._match(TokenType.TAKING):
+            if self._check(TokenType.NEWLINE):
+                raise self._error(self._peek(), "Expected at least one parameter name after `taking`.")
+
+            while True:
+                p_tok = self._consume(TokenType.IDENT, "Expected a parameter name.")
+                default: Optional[Expr] = None
+                if self._match(TokenType.EQ):
+                    default = self._expression()
+                    p_span = span_join(span_from_tokens(p_tok, p_tok), default.span)
+                else:
+                    p_span = span_from_tokens(p_tok, p_tok)
+
+                params.append(Param(name=p_tok.lexeme, default=default, span=p_span))
+
+                if not self._match(TokenType.COMMA):
+                    break
+
+        self._require_newline("Expected a newline after the function signature.")
+        body = self._block({TokenType.END})
+        end_tok = self._consume(TokenType.END, "Expected `end` to close the function definition.")
+        return DefineStmt(name=name_tok.lexeme, params=params, body=body, span=span_from_tokens(define_tok, end_tok))
+
+    def _give_back_statement(self, give_tok: Token) -> GiveBackStmt:
+        # give back <expr>?
+        back_tok = self._consume(TokenType.BACK, "Expected `back` after `give`.")
+
+        if self._check(TokenType.NEWLINE) or self._check(TokenType.EOF):
+            return GiveBackStmt(expr=None, span=span_from_tokens(give_tok, back_tok))
+
+        expr = self._expression()
+        return GiveBackStmt(expr=expr, span=span_join(span_from_tokens(give_tok, back_tok), expr.span))
 
     def _target(self) -> Target:
         # v0: IDENT or IDENT[expr]
@@ -265,12 +315,39 @@ class Parser:
     def _postfix(self) -> Expr:
         expr = self._primary()
         while True:
+            # function calls
+            if self._match(TokenType.LPAREN):
+                lpar = self._previous()
+                args: List[CallArg] = []
+
+                if not self._check(TokenType.RPAREN):
+                    while True:
+                        # named arg: ident = expr
+                        if self._check(TokenType.IDENT) and self._peek_n(1).type == TokenType.EQ:
+                            name_tok = self._advance()
+                            eq_tok = self._advance()
+                            val = self._expression()
+                            arg_span = span_join(span_from_tokens(name_tok, eq_tok), val.span)
+                            args.append(CallArg(name=name_tok.lexeme, value=val, span=arg_span))
+                        else:
+                            val = self._expression()
+                            args.append(CallArg(name=None, value=val, span=val.span))
+
+                        if not self._match(TokenType.COMMA):
+                            break
+
+                rpar = self._consume(TokenType.RPAREN, "Expected `)` after arguments.")
+                expr = CallExpr(callee=expr, args=args, span=span_join(expr.span, span_from_tokens(lpar, rpar)))
+                continue
+
+            # indexing
             if self._match(TokenType.LBRACKET):
                 lbr = self._previous()
                 idx = self._expression()
                 rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
                 expr = IndexExpr(collection=expr, index=idx, span=span_from_tokens(lbr, rbr))
                 continue
+
             break
         return expr
 
@@ -345,6 +422,12 @@ class Parser:
 
     def _peek(self) -> Token:
         return self.tokens[self._i]
+
+    def _peek_n(self, n: int) -> Token:
+        j = self._i + n
+        if j >= len(self.tokens):
+            return self.tokens[-1]
+        return self.tokens[j]
 
     def _previous(self) -> Token:
         return self.tokens[self._i - 1]

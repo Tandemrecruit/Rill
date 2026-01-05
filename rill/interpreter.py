@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, List
+from typing import Any, Callable, Optional, List, Dict
 
 from .ast import (
     Program,
@@ -12,9 +12,10 @@ from .ast import (
     StopStmt,
     SkipStmt,
     IfStmt,
-    IfBranch,
     RepeatTimesStmt,
     RepeatWhileStmt,
+    DefineStmt,
+    GiveBackStmt,
     Expr,
     LiteralExpr,
     NameExpr,
@@ -22,9 +23,12 @@ from .ast import (
     BinaryExpr,
     GroupExpr,
     IndexExpr,
+    CallExpr,
     Target,
     NameTarget,
     IndexTarget,
+    Param,
+    CallArg,
 )
 from .token import TokenType
 from .runtime import Environment, RillRuntimeError, to_rill_string
@@ -38,6 +42,20 @@ class _SkipLoop(Exception):
     pass
 
 
+class _Return(Exception):
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+
+@dataclass(frozen=True)
+class FunctionValue:
+    name: str
+    params: List[Param]
+    body: List[Stmt]
+    global_scope: Dict[str, Any]
+    span: object  # NodeSpan
+
+
 @dataclass
 class Interpreter:
     output: Callable[[str], None]
@@ -47,6 +65,7 @@ class Interpreter:
         self.output = output or (lambda s: print(s))
         self.env = env or Environment()
         self._loop_depth = 0
+        self._call_depth = 0
 
     def run(self, program: Program) -> None:
         for stmt in program.statements:
@@ -69,6 +88,26 @@ class Interpreter:
             val = self._eval_expr(stmt.expr)
             self._assign_target(stmt.target, val)
             return
+
+        if isinstance(stmt, DefineStmt):
+            # v0: keep it simple and only allow top-level functions (no closures).
+            if len(self.env.scopes) != 1:
+                raise RillRuntimeError("Functions can only be defined at the top level in v0.", stmt.span)
+            fn = FunctionValue(
+                name=stmt.name,
+                params=stmt.params,
+                body=stmt.body,
+                global_scope=self.env.scopes[0],
+                span=stmt.span,
+            )
+            self.env.define(stmt.name, fn, stmt.span)
+            return
+
+        if isinstance(stmt, GiveBackStmt):
+            if self._call_depth <= 0:
+                raise RillRuntimeError("`give back` can only be used inside a function.", stmt.span)
+            value = None if stmt.expr is None else self._eval_expr(stmt.expr)
+            raise _Return(value)
 
         if isinstance(stmt, StopStmt):
             if self._loop_depth <= 0:
@@ -188,7 +227,9 @@ class Interpreter:
                 if not isinstance(idx, int):
                     raise RillRuntimeError("List index must be an integer.", target.span)
                 if idx < 0:
-                    raise RillRuntimeError("Negative indices are not allowed. Use `last of ...` instead.", target.span)
+                    raise RillRuntimeError(
+                        "Negative indices are not allowed. Use `last of ...` instead.", target.span
+                    )
                 if idx >= len(coll):
                     raise RillRuntimeError(f"List index {idx} is out of range (length {len(coll)}).", target.span)
                 coll[idx] = value
@@ -205,6 +246,69 @@ class Interpreter:
 
     # ---------- expressions ----------
 
+    def _call_function(self, fn: FunctionValue, args: List[CallArg], span) -> Any:
+        # Evaluate arguments in caller environment first.
+        positional: List[Any] = []
+        named: Dict[str, Any] = {}
+        seen_named = False
+
+        for a in args:
+            if a.name is None:
+                if seen_named:
+                    raise RillRuntimeError("Positional arguments must come before named arguments.", a.span)
+                positional.append(self._eval_expr(a.value))
+            else:
+                seen_named = True
+                if a.name in named:
+                    raise RillRuntimeError(f"Argument `{a.name}` provided multiple times.", a.span)
+                named[a.name] = self._eval_expr(a.value)
+
+        params = fn.params
+        if len(positional) > len(params):
+            raise RillRuntimeError(
+                f"Too many arguments for `{fn.name}` (expected at most {len(params)}).", span
+            )
+
+        param_by_name = {p.name: p for p in params}
+
+        local: Dict[str, Any] = {}
+        # bind positional
+        for i, val in enumerate(positional):
+            local[params[i].name] = val
+
+        # bind named
+        for name, val in named.items():
+            p = param_by_name.get(name)
+            if p is None:
+                raise RillRuntimeError(f"Unknown parameter `{name}` for `{fn.name}`.", span)
+            if name in local:
+                raise RillRuntimeError(f"Parameter `{name}` already set by a positional argument.", span)
+            local[name] = val
+
+        saved_scopes = self.env.scopes
+        self.env.scopes = [fn.global_scope, local]
+        self._call_depth += 1
+        try:
+            # fill defaults
+            for p in params:
+                if p.name in local:
+                    continue
+                if p.default is not None:
+                    local[p.name] = self._eval_expr(p.default)
+                else:
+                    raise RillRuntimeError(f"Missing argument `{p.name}` for `{fn.name}`.", span)
+
+            try:
+                for s in fn.body:
+                    self._exec_stmt(s)
+            except _Return as r:
+                return r.value
+
+            return None
+        finally:
+            self._call_depth -= 1
+            self.env.scopes = saved_scopes
+
     def _eval_expr(self, expr: Expr) -> Any:
         if isinstance(expr, LiteralExpr):
             return expr.value
@@ -214,6 +318,12 @@ class Interpreter:
 
         if isinstance(expr, GroupExpr):
             return self._eval_expr(expr.expr)
+
+        if isinstance(expr, CallExpr):
+            callee_val = self._eval_expr(expr.callee)
+            if not isinstance(callee_val, FunctionValue):
+                raise RillRuntimeError("Only functions can be called.", expr.span)
+            return self._call_function(callee_val, expr.args, expr.span)
 
         if isinstance(expr, IndexExpr):
             coll = self._eval_expr(expr.collection)
