@@ -34,8 +34,8 @@ def test_examples_match_expected_output() -> None:
                 text=True,
                 timeout=30,
             )
-        except subprocess.TimeoutExpired:
-            raise AssertionError(f"{program.name} timed out after 30 seconds")
+        except subprocess.TimeoutExpired as e:
+            raise AssertionError(f"{program.name} timed out after 30 seconds") from e
 
         assert proc.returncode == 0, (
             f"{program.name} failed\n"
