@@ -1,0 +1,6 @@
+﻿define greet taking name = "world", punct = "!"
+    give back "Hello, " + name + punct
+end
+show greet()
+show greet("Ryan")
+show greet(name="Ada", punct="!!!")
