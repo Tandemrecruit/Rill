@@ -1,0 +1,15 @@
+set total to 0
+
+repeat 10 times
+    change total to total + 1
+
+    if total = 3
+        skip
+    end
+
+    if total = 8
+        stop
+    end
+
+    show total
+end
