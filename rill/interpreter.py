@@ -416,6 +416,8 @@ class Interpreter:
         if isinstance(expr, DictExpr):
             d: dict[Any, Any] = {}
             for ent in expr.entries:
+                if ent.key not in d:
+                    raise RillRuntimeError(f"Duplicate key `{ent.key}` in record/map literal.", ent.span)
                 d[ent.key] = self._eval_expr(ent.value)
             return d
 
