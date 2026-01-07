@@ -25,6 +25,7 @@ class TokenType(Enum):
     FOR = auto()
     EACH = auto()
     DEFINE = auto()
+    TAKING = auto()
     GIVE = auto()
     BACK = auto()
     SHOW = auto()
@@ -83,6 +84,7 @@ KEYWORDS = {
     "for": TokenType.FOR,
     "each": TokenType.EACH,
     "define": TokenType.DEFINE,
+    "taking": TokenType.TAKING,
     "give": TokenType.GIVE,
     "back": TokenType.BACK,
     "show": TokenType.SHOW,
