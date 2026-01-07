@@ -14,6 +14,10 @@ from .ast import (
     UnaryExpr,
     BinaryExpr,
     GroupExpr,
+    ListExpr,
+    DictExpr,
+    DictEntry,
+    FieldExpr,
     IndexExpr,
     CallExpr,
     CallArg,
@@ -21,6 +25,7 @@ from .ast import (
     Target,
     NameTarget,
     IndexTarget,
+    FieldTarget,
     Stmt,
     ShowStmt,
     SetStmt,
@@ -189,8 +194,6 @@ class Parser:
         branches.append(IfBranch(condition=cond, body=then_body, span=span_join(cond.span, then_body[-1].span) if then_body else cond.span))
 
         while self._match(TokenType.OTHERWISE):
-            other_tok = self._previous()
-
             if self._match(TokenType.IF):
                 cond2 = self._expression()
                 self._require_newline("Expected a newline after the `otherwise if` condition.")
@@ -313,24 +316,46 @@ class Parser:
         return GiveBackStmt(expr=expr, span=span_join(span_from_tokens(give_tok, back_tok), expr.span))
 
     def _target(self) -> Target:
-        # v0: IDENT or IDENT[expr]
+        # v0: name, name[index], name.field, and chained combos
         """
-        Parse a change target: either a bare identifier or an identifier with an index (e.g., `name` or `name[expr]`).
+        Parse an assignable target (a variable, indexed target, or field target) after a `change` statement.
+        
+        Parses an initial identifier and then any number of dot-field or bracket-index postfixes (e.g., `x`, `x.y`, `x[y]`, `x.y[z].w`), then converts the final expression into the corresponding Target variant.
         
         Returns:
-            NameTarget: when the next token is an identifier with no indexing.
-            IndexTarget: when the identifier is followed by `[` and an index expression; the span covers from the identifier to the closing `]`.
+            Target: A NameTarget for a bare identifier, an IndexTarget if the final form is an index expression, or a FieldTarget if the final form is a field expression.
+        
+        Raises:
+            RillParseError: If the input does not form a valid assignment target.
         """
         name_tok = self._consume(TokenType.IDENT, "Expected a variable name after `change`.")
-        name_span = span_from_tokens(name_tok, name_tok)
-        base_expr = NameExpr(name=name_tok.lexeme, span=name_span)
+        base: Expr = NameExpr(name=name_tok.lexeme, span=span_from_tokens(name_tok, name_tok))
 
-        if self._match(TokenType.LBRACKET):
-            idx = self._expression()
-            rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
-            return IndexTarget(collection=base_expr, index=idx, span=span_from_tokens(name_tok, rbr))
+        while True:
+            if self._match(TokenType.DOT):
+                dot = self._previous()
+                field = self._consume(TokenType.IDENT, "Expected a field name after `.`.")
+                base = FieldExpr(object=base, name=field.lexeme, span=span_join(base.span, span_from_tokens(dot, field)))
+                continue
 
-        return NameTarget(name=name_tok.lexeme, span=name_span)
+            if self._match(TokenType.LBRACKET):
+                lbr = self._previous()
+                idx = self._expression()
+                rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
+                base = IndexExpr(collection=base, index=idx, span=span_join(base.span, span_from_tokens(lbr, rbr)))
+                continue
+
+            break
+
+        # convert final postfix expression to an assignable target
+        if isinstance(base, NameExpr):
+            return NameTarget(name=base.name, span=base.span)
+        if isinstance(base, IndexExpr):
+            return IndexTarget(collection=base.collection, index=base.index, span=base.span)
+        if isinstance(base, FieldExpr):
+            return FieldTarget(object=base.object, name=base.name, span=base.span)
+
+        raise self._error(self._peek(), "Invalid assignment target.")
 
     # ---------- expressions ----------
 
@@ -386,12 +411,12 @@ class Parser:
 
     def _postfix(self) -> Expr:
         """
-        Parse postfix operations (function calls and indexing) applied to a primary expression.
+        Parse and apply postfix operators (function calls, indexing, and field access) to a primary expression.
         
-        Continues consuming call or indexing postfixes after a primary expression. Call arguments may be positional or named (named form: identifier = expression); multiple comma-separated arguments are supported. Indexing uses square brackets with a single index expression.
+        Continues consuming successive postfix forms after a primary: function calls with positional or named arguments (identifier = expression), indexing with square brackets, and dot field access. Stops when no postfix applies.
         
         Returns:
-        	an Expr: the primary expression with any parsed CallExpr or IndexExpr postfixes applied (or the original primary if none).
+        	an Expr: the primary expression with any parsed CallExpr, IndexExpr, or FieldExpr postfixes applied (or the original primary if none).
         """
         expr = self._primary()
         while True:
@@ -425,13 +450,32 @@ class Parser:
                 lbr = self._previous()
                 idx = self._expression()
                 rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
-                expr = IndexExpr(collection=expr, index=idx, span=span_from_tokens(lbr, rbr))
+                expr = IndexExpr(collection=expr, index=idx, span=span_join(expr.span, span_from_tokens(lbr, rbr)))
+                continue
+
+
+            # field access
+            if self._match(TokenType.DOT):
+                dot = self._previous()
+                name_tok = self._consume(TokenType.IDENT, "Expected a field name after `.`.")
+                expr = FieldExpr(object=expr, name=name_tok.lexeme, span=span_join(expr.span, span_from_tokens(dot, name_tok)))
                 continue
 
             break
         return expr
 
     def _primary(self) -> Expr:
+        """
+        Parse a primary expression and produce the corresponding AST node.
+        
+        Supported primary forms: numeric and string literals, boolean and empty literals, list and dict literals, identifiers (names), and parenthesized expressions. List literals produce a ListExpr, dict literals produce a DictExpr containing DictEntry items, and parenthesized inputs produce a GroupExpr.
+        
+        Returns:
+            Expr: The AST node representing the parsed primary expression.
+        
+        Raises:
+            RillParseError: If the next token does not begin any recognized primary form.
+        """
         if self._match(TokenType.NUMBER):
             t = self._previous()
             return LiteralExpr(value=t.literal, span=span_from_tokens(t, t))
@@ -451,6 +495,43 @@ class Parser:
         if self._match(TokenType.EMPTY):
             t = self._previous()
             return LiteralExpr(value=None, span=span_from_tokens(t, t))
+
+        if self._match(TokenType.LBRACKET):
+            lbr = self._previous()
+            elements: List[Expr] = []
+            if not self._check(TokenType.RBRACKET):
+                while True:
+                    elements.append(self._expression())
+                    if not self._match(TokenType.COMMA):
+                        break
+            rbr = self._consume(TokenType.RBRACKET, "Expected `]` after list literal.")
+            return ListExpr(elements=elements, span=span_from_tokens(lbr, rbr))
+
+        if self._match(TokenType.LBRACE):
+            lbr = self._previous()
+            entries: List[DictEntry] = []
+            if not self._check(TokenType.RBRACE):
+                while True:
+                    # key: IDENT or STRING
+                    if self._match(TokenType.IDENT):
+                        key_tok = self._previous()
+                        key = key_tok.lexeme
+                        key_span = span_from_tokens(key_tok, key_tok)
+                    elif self._match(TokenType.STRING):
+                        key_tok = self._previous()
+                        key = key_tok.literal
+                        key_span = span_from_tokens(key_tok, key_tok)
+                    else:
+                        raise self._error(self._peek(), "Expected a key (name or string) in dict literal.")
+
+                    self._consume(TokenType.COLON, "Expected `:` after dict key.")
+                    val = self._expression()
+                    entries.append(DictEntry(key=str(key), value=val, span=span_join(key_span, val.span)))
+
+                    if not self._match(TokenType.COMMA):
+                        break
+            rbr = self._consume(TokenType.RBRACE, "Expected `}` after dict literal.")
+            return DictExpr(entries=entries, span=span_from_tokens(lbr, rbr))
 
         if self._match(TokenType.IDENT):
             t = self._previous()

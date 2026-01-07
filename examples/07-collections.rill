@@ -1,0 +1,12 @@
+set nums to [10, 20, 30]
+show nums[1]
+
+set person to {name: "Ava", age: 12}
+show person.name
+change person.age to person.age + 1
+show person.age
+
+set settings to {"theme": "dark"}
+show settings["theme"]
+change settings["theme"] to "light"
+show settings["theme"]

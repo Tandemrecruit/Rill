@@ -21,22 +21,23 @@ This repository is a single master repo for all Rill work (lexer → parser → 
   - Statements:
     - `show …`
     - `set <name> to …`
-    - `change <name> to …`
+    - `change <target> to …`
     - `if …` / `otherwise` / `end`
     - `repeat … times` / `repeat while …` / `end`
     - `stop` / `skip` (loop control)
-  - Assignment targets: `name` and `name[index]`
-  - Expressions with precedence: unary (`not`, unary `-`), `* / %`, `+ -`, comparisons, `and`, `or`, grouping, indexing
+    - `define … taking …` / `give back …`
+  - Assignment targets: `name`, `name[index]`, `name.field` (and chained combos)
+  - Expressions with precedence: unary (`not`, unary `-`), `* / %`, `+ -`, comparisons, `and`, `or`, grouping, calls, indexing, field access
+  - Collection literals: lists (`[1, 2]`) and records/maps (`{name: "Ava"}`, `{"k": "v"}`)
 
 - Interpreter
   - Executes the v0 language subset above (including `if` / `repeat` / `stop` / `skip`)
-  - Value types in v0: `number`, `text`, `boolean`, `empty`
+  - Value types in v0: `number`, `text`, `boolean`, `empty`, `list`, `record/map`
   - Strict typing (no silent coercion)
 
 ### Not implemented yet
 
-- Functions: `define … taking …` / `give back`
-- records/maps/tables (syntax and runtime)
+- tables and table-first operations (syntax and runtime)
 - `trace` / `explain` modes
 - file module (`file.load` / `file.save`)
 - testing blocks (`check` / `expect`)
@@ -153,6 +154,7 @@ Milestones are tracked via annotated git tags (recommended format: `v0-<mileston
 - `v0-parser`
 - `v0-interpreter`
 - `v0-control-flow`
+- `v0-functions`
 
 To push tags to GitHub:
 

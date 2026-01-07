@@ -23,17 +23,22 @@ from .ast import (
     UnaryExpr,
     BinaryExpr,
     GroupExpr,
+    ListExpr,
+    DictExpr,
+    FieldExpr,
     IndexExpr,
     CallExpr,
     Target,
     NameTarget,
     IndexTarget,
+    FieldTarget,
     Param,
     CallArg,
     NodeSpan,
 )
 from .token import TokenType
-from .runtime import Environment, RillRuntimeError, to_rill_string
+from .runtime import Environment, to_rill_string
+from .errors import RillRuntimeError, FieldTypeError, FieldNotFoundError
 
 
 class _StopLoop(Exception):
@@ -255,15 +260,18 @@ class Interpreter:
 
     def _assign_target(self, target: Target, value: Any) -> None:
         """
-        Assign a value to a target location, which may be a variable name or an indexed element.
+        Assigns a value to a target location, which may be a variable name, an indexed element, or an object field.
         
         Parameters:
-            target (Target): The assignment target; either a NameTarget or an IndexTarget specifying a collection and index.
-            value (Any): The value to assign to the target.
+            target (Target): The assignment target; supported variants are NameTarget, IndexTarget, and FieldTarget.
+                - NameTarget: binds the value to a variable in the current environment.
+                - IndexTarget: assigns into a list (by integer index) or a dict (by key).
+                - FieldTarget: assigns into a dict-like object's named field.
+            value (Any): The value to assign.
         
         Raises:
-            RillRuntimeError: If the target type is unsupported, if index assignment is attempted on a non-list/non-map,
-                              if a list index is not an integer, negative, or out of range, or if other target-related errors occur.
+            RillRuntimeError: If the target variant is unsupported; if IndexTarget is used on a non-list/non-dict;
+                if a list index is not an integer, is negative, or is out of range; or if FieldTarget is used on a non-dict.
         """
         if isinstance(target, NameTarget):
             self.env.assign(target.name, value, target.span)
@@ -292,6 +300,13 @@ class Interpreter:
                 return
 
             raise RillRuntimeError("Index assignment requires a list or map.", target.span)
+
+        if isinstance(target, FieldTarget):
+            obj = self._eval_expr(target.object)
+            if not isinstance(obj, dict):
+                raise FieldTypeError("assignment", target.span)
+            obj[target.name] = value
+            return
 
         raise RillRuntimeError(f"Unsupported target type: {type(target).__name__}", getattr(target, "span", None))
 
@@ -395,6 +410,25 @@ class Interpreter:
 
         if isinstance(expr, GroupExpr):
             return self._eval_expr(expr.expr)
+
+        if isinstance(expr, ListExpr):
+            return [self._eval_expr(e) for e in expr.elements]
+
+        if isinstance(expr, DictExpr):
+            d: dict[Any, Any] = {}
+            for ent in expr.entries:
+                if ent.key in d:
+                    raise RillRuntimeError(f"Duplicate key `{ent.key}` in record/map literal.", ent.span)
+                d[ent.key] = self._eval_expr(ent.value)
+            return d
+
+        if isinstance(expr, FieldExpr):
+            obj = self._eval_expr(expr.object)
+            if not isinstance(obj, dict):
+                raise FieldTypeError("access", expr.span)
+            if expr.name not in obj:
+                raise FieldNotFoundError(expr.name, expr.span)
+            return obj[expr.name]
 
         if isinstance(expr, CallExpr):
             callee_val = self._eval_expr(expr.callee)
