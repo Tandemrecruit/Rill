@@ -319,6 +319,17 @@ class Parser:
 
     def _target(self) -> Target:
         # v0: name, name[index], name.field, and chained combos
+        """
+        Parse an assignable target (a variable, indexed target, or field target) after a `change` statement.
+        
+        Parses an initial identifier and then any number of dot-field or bracket-index postfixes (e.g., `x`, `x.y`, `x[y]`, `x.y[z].w`), then converts the final expression into the corresponding Target variant.
+        
+        Returns:
+            Target: A NameTarget for a bare identifier, an IndexTarget if the final form is an index expression, or a FieldTarget if the final form is a field expression.
+        
+        Raises:
+            RillParseError: If the input does not form a valid assignment target.
+        """
         name_tok = self._consume(TokenType.IDENT, "Expected a variable name after `change`.")
         base: Expr = NameExpr(name=name_tok.lexeme, span=span_from_tokens(name_tok, name_tok))
 
@@ -402,12 +413,12 @@ class Parser:
 
     def _postfix(self) -> Expr:
         """
-        Parse postfix operations (function calls and indexing) applied to a primary expression.
+        Parse and apply postfix operators (function calls, indexing, and field access) to a primary expression.
         
-        Continues consuming call or indexing postfixes after a primary expression. Call arguments may be positional or named (named form: identifier = expression); multiple comma-separated arguments are supported. Indexing uses square brackets with a single index expression.
+        Continues consuming successive postfix forms after a primary: function calls with positional or named arguments (identifier = expression), indexing with square brackets, and dot field access. Stops when no postfix applies.
         
         Returns:
-        	an Expr: the primary expression with any parsed CallExpr or IndexExpr postfixes applied (or the original primary if none).
+        	an Expr: the primary expression with any parsed CallExpr, IndexExpr, or FieldExpr postfixes applied (or the original primary if none).
         """
         expr = self._primary()
         while True:
@@ -456,6 +467,17 @@ class Parser:
         return expr
 
     def _primary(self) -> Expr:
+        """
+        Parse a primary expression and produce the corresponding AST node.
+        
+        Supported primary forms: numeric and string literals, boolean and empty literals, list and dict literals, identifiers (names), and parenthesized expressions. List literals produce a ListExpr, dict literals produce a DictExpr containing DictEntry items, and parenthesized inputs produce a GroupExpr.
+        
+        Returns:
+            Expr: The AST node representing the parsed primary expression.
+        
+        Raises:
+            RillParseError: If the next token does not begin any recognized primary form.
+        """
         if self._match(TokenType.NUMBER):
             t = self._previous()
             return LiteralExpr(value=t.literal, span=span_from_tokens(t, t))

@@ -259,15 +259,18 @@ class Interpreter:
 
     def _assign_target(self, target: Target, value: Any) -> None:
         """
-        Assign a value to a target location, which may be a variable name or an indexed element.
+        Assigns a value to a target location, which may be a variable name, an indexed element, or an object field.
         
         Parameters:
-            target (Target): The assignment target; either a NameTarget or an IndexTarget specifying a collection and index.
-            value (Any): The value to assign to the target.
+            target (Target): The assignment target; supported variants are NameTarget, IndexTarget, and FieldTarget.
+                - NameTarget: binds the value to a variable in the current environment.
+                - IndexTarget: assigns into a list (by integer index) or a dict (by key).
+                - FieldTarget: assigns into a dict-like object's named field.
+            value (Any): The value to assign.
         
         Raises:
-            RillRuntimeError: If the target type is unsupported, if index assignment is attempted on a non-list/non-map,
-                              if a list index is not an integer, negative, or out of range, or if other target-related errors occur.
+            RillRuntimeError: If the target variant is unsupported; if IndexTarget is used on a non-list/non-dict;
+                if a list index is not an integer, is negative, or is out of range; or if FieldTarget is used on a non-dict.
         """
         if isinstance(target, NameTarget):
             self.env.assign(target.name, value, target.span)
