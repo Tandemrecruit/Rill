@@ -46,6 +46,12 @@ class _SkipLoop(Exception):
 
 class _Return(Exception):
     def __init__(self, value: Any) -> None:
+        """
+        Initialize the exception with the value to be returned from a function.
+        
+        Parameters:
+            value: The value to carry as the function's return value when this exception is raised.
+        """
         super().__init__()
         self.value = value
 
@@ -65,18 +71,49 @@ class Interpreter:
     env: Environment
 
     def __init__(self, output: Optional[Callable[[str], None]] = None, env: Optional[Environment] = None) -> None:
+        """
+        Create a new Interpreter, configuring its output sink and initial environment.
+        
+        Initializes the output callable (used for ShowStmt output), the runtime Environment, and internal counters for loop and call nesting.
+        
+        Parameters:
+            output (Callable[[str], None], optional): Function to receive interpreter output strings. Defaults to printing to stdout.
+            env (Environment, optional): Preexisting runtime environment to use. Defaults to a new Environment() instance.
+        """
         self.output = output or (lambda s: print(s))
         self.env = env or Environment()
         self._loop_depth = 0
         self._call_depth = 0
 
     def run(self, program: Program) -> None:
+        """
+        Execute all top-level statements in the given program in order.
+        
+        Each statement's effects are applied to the interpreter's environment and may produce output via the interpreter's configured output callable.
+        
+        Parameters:
+            program (Program): The parsed program AST whose top-level statements will be executed.
+        """
         for stmt in program.statements:
             self._exec_stmt(stmt)
 
     # ---------- statements ----------
 
     def _exec_stmt(self, stmt: Stmt) -> None:
+        """
+        Execute a single AST statement node in the interpreter.
+        
+        Performs the action represented by `stmt`, which may mutate the environment, emit output, define functions, control loop execution, or trigger a function return.
+        
+        Parameters:
+            stmt (Stmt): The AST statement node to execute.
+        
+        Raises:
+            RillRuntimeError: If the statement is unsupported or used in an invalid context (e.g., defining a function outside top level, `give back` outside a function, or `stop`/`skip` outside a loop).
+            _Return: Raised to signal a function return with an optional return value.
+            _StopLoop: Raised to signal termination of the nearest enclosing repeat loop.
+            _SkipLoop: Raised to signal skipping the remainder of the current loop iteration.
+        """
         if isinstance(stmt, ShowStmt):
             val = self._eval_expr(stmt.expr)
             self.output(to_rill_string(val))
@@ -217,6 +254,17 @@ class Interpreter:
             self._loop_depth -= 1
 
     def _assign_target(self, target: Target, value: Any) -> None:
+        """
+        Assign a value to a target location, which may be a variable name or an indexed element.
+        
+        Parameters:
+            target (Target): The assignment target; either a NameTarget or an IndexTarget specifying a collection and index.
+            value (Any): The value to assign to the target.
+        
+        Raises:
+            RillRuntimeError: If the target type is unsupported, if index assignment is attempted on a non-list/non-map,
+                              if a list index is not an integer, negative, or out of range, or if other target-related errors occur.
+        """
         if isinstance(target, NameTarget):
             self.env.assign(target.name, value, target.span)
             return
@@ -251,6 +299,20 @@ class Interpreter:
 
     def _call_function(self, fn: FunctionValue, args: list[CallArg], span) -> Any:
         # Evaluate arguments in caller environment first.
+        """
+        Invoke a user-defined function with the given arguments and return its result.
+        
+        Parameters:
+            fn (FunctionValue): The function value to call.
+            args (List[CallArg]): Evaluated call arguments (positional and/or named).
+            span: Source span used for error reporting when argument/arity checks fail.
+        
+        Returns:
+            The value produced by the function body, or `None` if the function did not return a value.
+        
+        Raises:
+            RillRuntimeError: If arguments violate ordering/duplication rules, unknown parameters are provided, required parameters are missing, or too many positional arguments are passed.
+        """
         positional: list[Any] = []
         named: dict[str, Any] = {}
         seen_named = False
@@ -313,6 +375,18 @@ class Interpreter:
             self.env.scopes = saved_scopes
 
     def _eval_expr(self, expr: Expr) -> Any:
+        """
+        Evaluate an AST expression and produce its runtime value.
+        
+        Parameters:
+            expr (Expr): The expression AST node to evaluate.
+        
+        Returns:
+            Any: The value produced by evaluating the expression (e.g. numbers, booleans, strings, lists, dicts, function values, or None).
+        
+        Raises:
+            RillRuntimeError: If evaluation fails due to type errors, invalid operations (unsupported operators, bad indexing, comparison/type mismatches), out-of-range indices, unknown map keys, division/modulo by zero, calling a non-function, or other runtime validation errors.
+        """
         if isinstance(expr, LiteralExpr):
             return expr.value
 

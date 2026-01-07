@@ -86,6 +86,17 @@ class Parser:
     # ---------- statements ----------
 
     def _statement(self) -> Stmt:
+        """
+        Parse the next statement from the token stream and return its corresponding AST node.
+        
+        Supports the statement forms: `show`, `set`, `change`, `stop`, `skip`, `if`, `repeat`, `define`, and `give back`. Consumes the tokens that constitute the parsed statement and constructs the appropriate Stmt variant with a span covering the statement.
+        
+        Returns:
+            Stmt: The AST node representing the parsed statement.
+        
+        Raises:
+            RillParseError: If the upcoming tokens do not form a valid statement.
+        """
         if self._match(TokenType.SHOW):
             start = self._previous()
             expr = self._expression()
@@ -128,6 +139,18 @@ class Parser:
         raise self._error(self._peek(), "Expected a statement (show/set/change/if/repeat/define/give back).")
 
     def _require_newline(self, message: str) -> Token:
+        """
+        Ensure the next token is a newline.
+        
+        Parameters:
+            message (str): Error message used to construct the parse error if a newline is not found.
+        
+        Returns:
+            Token: The consumed NEWLINE token.
+        
+        Raises:
+            RillParseError: If the next token is not a NEWLINE.
+        """
         if self._match(TokenType.NEWLINE):
             return self._previous()
         raise self._error(self._peek(), message)
@@ -194,6 +217,17 @@ class Parser:
     def _repeat_statement(self, repeat_tok: Token) -> Stmt:
         # repeat while <expr> NEWLINE <block> end
         # repeat <expr> times NEWLINE <block> end
+        """
+        Parse a `repeat` statement, supporting both `repeat while <expr>` and `repeat <expr> times` forms.
+        
+        Parses either a conditional repeat (`repeat while <expr>`) or a counted repeat (`repeat <expr> times`), consumes the body up to the closing `end`, and returns the corresponding AST statement node with a span covering the whole construct.
+        
+        Returns:
+            RepeatWhileStmt or RepeatTimesStmt: A `RepeatWhileStmt` for the `repeat while` form, or a `RepeatTimesStmt` for the counted `repeat ... times` form.
+        
+        Raises:
+            RillParseError: If required tokens are missing or the repeat syntax is malformed (for example missing `times`, missing newline after the header, or missing closing `end`).
+        """
         if self._match(TokenType.WHILE):
             cond = self._expression()
             self._require_newline("Expected a newline after the `repeat while` condition.")
@@ -211,6 +245,22 @@ class Parser:
 
     def _define_statement(self, define_tok: Token) -> DefineStmt:
         # define <name> (taking <param>(, <param>)*)? NEWLINE <block> end
+        """
+        Parse a function definition statement and return a DefineStmt AST node.
+        
+        Parses a signature of the form:
+          define <name> (taking <param> (',' <param>)*)? NEWLINE <block> end
+        Parameters may have optional default expressions using `=`.
+        
+        Returns:
+            DefineStmt: AST node with the function name, list of Param (each with name, optional default, and span),
+                        the function body as a list of statements, and a span covering the entire definition.
+        
+        Raises:
+            RillParseError: if the function name is missing, a parameter name is missing after `taking`,
+                            no parameters follow `taking`, the signature is not terminated by a newline,
+                            or the definition is not closed with `end`.
+        """
         name_tok = self._consume(TokenType.IDENT, "Expected a function name after `define`.")
         params: List[Param] = []
 
@@ -243,6 +293,17 @@ class Parser:
 
     def _give_back_statement(self, give_tok: Token) -> GiveBackStmt:
         # give back <expr>?
+        """
+        Parse a `give back` statement and produce its corresponding AST node.
+        
+        Consumes the required `back` token after `give`. If the next token is a newline or EOF, returns a GiveBackStmt with `expr=None`; otherwise parses the following expression and returns a GiveBackStmt whose span covers from the initial `give` token through the expression.
+        
+        Parameters:
+            give_tok (Token): The `give` token that begins the statement; used to compute the node span.
+        
+        Returns:
+            GiveBackStmt: An AST node representing the parsed `give back` statement. If no expression is present, `expr` is `None`.
+        """
         back_tok = self._consume(TokenType.BACK, "Expected `back` after `give`.")
 
         if self._check(TokenType.NEWLINE) or self._check(TokenType.EOF):
@@ -253,6 +314,13 @@ class Parser:
 
     def _target(self) -> Target:
         # v0: IDENT or IDENT[expr]
+        """
+        Parse a change target: either a bare identifier or an identifier with an index (e.g., `name` or `name[expr]`).
+        
+        Returns:
+            NameTarget: when the next token is an identifier with no indexing.
+            IndexTarget: when the identifier is followed by `[` and an index expression; the span covers from the identifier to the closing `]`.
+        """
         name_tok = self._consume(TokenType.IDENT, "Expected a variable name after `change`.")
         name_span = span_from_tokens(name_tok, name_tok)
         base_expr = NameExpr(name=name_tok.lexeme, span=name_span)
@@ -317,6 +385,14 @@ class Parser:
         return self._postfix()
 
     def _postfix(self) -> Expr:
+        """
+        Parse postfix operations (function calls and indexing) applied to a primary expression.
+        
+        Continues consuming call or indexing postfixes after a primary expression. Call arguments may be positional or named (named form: identifier = expression); multiple comma-separated arguments are supported. Indexing uses square brackets with a single index expression.
+        
+        Returns:
+        	an Expr: the primary expression with any parsed CallExpr or IndexExpr postfixes applied (or the original primary if none).
+        """
         expr = self._primary()
         while True:
             # function calls
@@ -425,15 +501,36 @@ class Parser:
         return self._peek().type == TokenType.EOF
 
     def _peek(self) -> Token:
+        """
+        Get the current lookahead token without advancing the parser.
+        
+        Returns:
+            Token: The token at the parser's current index (the current lookahead). If the parser is at the end, this will be the EOF token.
+        """
         return self.tokens[self._i]
 
     def _peek_n(self, n: int) -> Token:
+        """
+        Return the token that is n positions ahead of the current parser index without advancing the parser.
+        
+        Parameters:
+            n (int): Number of tokens to look ahead (0 returns the current token).
+        
+        Returns:
+            Token: The token at the lookahead position, or the last token if the requested position is past the end of the token list.
+        """
         j = self._i + n
         if j >= len(self.tokens):
             return self.tokens[-1]
         return self.tokens[j]
 
     def _previous(self) -> Token:
+        """
+        Get the most recently consumed token.
+        
+        Returns:
+            Token: The token immediately before the current parser position.
+        """
         return self.tokens[self._i - 1]
 
     def _error(self, token: Token, message: str) -> RillParseError:
