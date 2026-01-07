@@ -37,7 +37,8 @@ from .ast import (
     NodeSpan,
 )
 from .token import TokenType
-from .runtime import Environment, RillRuntimeError, to_rill_string
+from .runtime import Environment, to_rill_string
+from .errors import RillRuntimeError, FieldTypeError, FieldNotFoundError
 
 
 class _StopLoop(Exception):
@@ -303,7 +304,7 @@ class Interpreter:
         if isinstance(target, FieldTarget):
             obj = self._eval_expr(target.object)
             if not isinstance(obj, dict):
-                raise RillRuntimeError("Field assignment requires a record or map.", target.span)
+                raise FieldTypeError("assignment", target.span)
             obj[target.name] = value
             return
 
@@ -416,7 +417,7 @@ class Interpreter:
         if isinstance(expr, DictExpr):
             d: dict[Any, Any] = {}
             for ent in expr.entries:
-                if ent.key not in d:
+                if ent.key in d:
                     raise RillRuntimeError(f"Duplicate key `{ent.key}` in record/map literal.", ent.span)
                 d[ent.key] = self._eval_expr(ent.value)
             return d
@@ -424,9 +425,9 @@ class Interpreter:
         if isinstance(expr, FieldExpr):
             obj = self._eval_expr(expr.object)
             if not isinstance(obj, dict):
-                raise RillRuntimeError("Field access requires a record or map.", expr.span)
+                raise FieldTypeError("access", expr.span)
             if expr.name not in obj:
-                raise RillRuntimeError(f"Record/map field `{expr.name}` not found.", expr.span)
+                raise FieldNotFoundError(expr.name, expr.span)
             return obj[expr.name]
 
         if isinstance(expr, CallExpr):

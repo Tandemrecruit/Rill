@@ -194,8 +194,6 @@ class Parser:
         branches.append(IfBranch(condition=cond, body=then_body, span=span_join(cond.span, then_body[-1].span) if then_body else cond.span))
 
         while self._match(TokenType.OTHERWISE):
-            other_tok = self._previous()
-
             if self._match(TokenType.IF):
                 cond2 = self._expression()
                 self._require_newline("Expected a newline after the `otherwise if` condition.")
@@ -452,7 +450,7 @@ class Parser:
                 lbr = self._previous()
                 idx = self._expression()
                 rbr = self._consume(TokenType.RBRACKET, "Expected `]` after index.")
-                expr = IndexExpr(collection=expr, index=idx, span=span_from_tokens(lbr, rbr))
+                expr = IndexExpr(collection=expr, index=idx, span=span_join(expr.span, span_from_tokens(lbr, rbr)))
                 continue
 
 

@@ -134,3 +134,33 @@ class RillParseError(RillError):
 
 class RillRuntimeError(RillError):
     pass
+
+
+class FieldTypeError(RillRuntimeError):
+    """Error raised when field access or assignment is attempted on a non-record/map value."""
+
+    def __init__(self, operation: str, span: Optional[NodeSpan] = None) -> None:
+        """
+        Initialize a FieldTypeError for field access or assignment operations.
+
+        Parameters:
+            operation (str): The operation type, either "access" or "assignment".
+            span (Optional[NodeSpan]): Optional source span indicating the location of the error.
+        """
+        message = f"Field {operation} requires a record or map."
+        super().__init__(message, span)
+
+
+class FieldNotFoundError(RillRuntimeError):
+    """Error raised when accessing a field that does not exist in a record/map."""
+
+    def __init__(self, field_name: str, span: Optional[NodeSpan] = None) -> None:
+        """
+        Initialize a FieldNotFoundError for missing field access.
+
+        Parameters:
+            field_name (str): The name of the field that was not found.
+            span (Optional[NodeSpan]): Optional source span indicating the location of the error.
+        """
+        message = f"Record/map field `{field_name}` not found."
+        super().__init__(message, span)
