@@ -9,3 +9,4 @@ example.rill
 .vscode/
 coverage.xml
 .coverage
+*.patch
