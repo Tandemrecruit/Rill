@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, List, Dict
+from collections.abc import Callable
+from typing import Any, Optional
 
 from .ast import (
     Program,
@@ -29,6 +30,7 @@ from .ast import (
     IndexTarget,
     Param,
     CallArg,
+    NodeSpan,
 )
 from .token import TokenType
 from .runtime import Environment, RillRuntimeError, to_rill_string
@@ -44,16 +46,17 @@ class _SkipLoop(Exception):
 
 class _Return(Exception):
     def __init__(self, value: Any) -> None:
+        super().__init__()
         self.value = value
 
 
 @dataclass(frozen=True)
 class FunctionValue:
     name: str
-    params: List[Param]
-    body: List[Stmt]
-    global_scope: Dict[str, Any]
-    span: object  # NodeSpan
+    params: list[Param]
+    body: list[Stmt]
+    global_scope: dict[str, Any]
+    span: NodeSpan
 
 
 @dataclass
@@ -246,10 +249,10 @@ class Interpreter:
 
     # ---------- expressions ----------
 
-    def _call_function(self, fn: FunctionValue, args: List[CallArg], span) -> Any:
+    def _call_function(self, fn: FunctionValue, args: list[CallArg], span) -> Any:
         # Evaluate arguments in caller environment first.
-        positional: List[Any] = []
-        named: Dict[str, Any] = {}
+        positional: list[Any] = []
+        named: dict[str, Any] = {}
         seen_named = False
 
         for a in args:
@@ -271,7 +274,7 @@ class Interpreter:
 
         param_by_name = {p.name: p for p in params}
 
-        local: Dict[str, Any] = {}
+        local: dict[str, Any] = {}
         # bind positional
         for i, val in enumerate(positional):
             local[params[i].name] = val

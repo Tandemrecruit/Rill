@@ -218,13 +218,17 @@ class Parser:
             if self._check(TokenType.NEWLINE):
                 raise self._error(self._peek(), "Expected at least one parameter name after `taking`.")
 
+            seen_default = False
             while True:
                 p_tok = self._consume(TokenType.IDENT, "Expected a parameter name.")
                 default: Optional[Expr] = None
                 if self._match(TokenType.EQ):
+                    seen_default = True
                     default = self._expression()
                     p_span = span_join(span_from_tokens(p_tok, p_tok), default.span)
                 else:
+                    if seen_default:
+                        raise self._error(p_tok, "Required parameters must come before parameters with defaults.")
                     p_span = span_from_tokens(p_tok, p_tok)
 
                 params.append(Param(name=p_tok.lexeme, default=default, span=p_span))
@@ -324,8 +328,8 @@ class Parser:
                     while True:
                         # named arg: ident = expr
                         if self._check(TokenType.IDENT) and self._peek_n(1).type == TokenType.EQ:
-                            name_tok = self._advance()
-                            eq_tok = self._advance()
+                            name_tok = self._consume(TokenType.IDENT, "expected argument name")
+                            eq_tok = self._consume(TokenType.EQ, "expected '=' after argument name")
                             val = self._expression()
                             arg_span = span_join(span_from_tokens(name_tok, eq_tok), val.span)
                             args.append(CallArg(name=name_tok.lexeme, value=val, span=arg_span))

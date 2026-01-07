@@ -21,6 +21,35 @@ class NodeSpan:
     end_index: int
 
 
+# ---------- Helper / Supporting Structures ----------
+#
+# These are supporting dataclasses referenced by AST nodes, but they are not
+# themselves part of the Expr/Stmt inheritance tree.
+
+@dataclass(frozen=True)
+class CallArg:
+    """Helper/supporting dataclass for CallExpr."""
+    name: Optional[str]  # None for positional arg
+    value: Expr
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class IfBranch:
+    """Helper/supporting dataclass for IfStmt."""
+    condition: Expr
+    body: List[Stmt]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class Param:
+    """Helper/supporting dataclass for DefineStmt."""
+    name: str
+    default: Optional[Expr]
+    span: NodeSpan
+
+
 # ---------- Expressions ----------
 
 class Expr:
@@ -68,23 +97,9 @@ class IndexExpr(Expr):
 
 
 @dataclass(frozen=True)
-class CallArg:
-    name: Optional[str]  # None for positional arg
-    value: Expr
-    span: NodeSpan
-
-
-@dataclass(frozen=True)
 class CallExpr(Expr):
     callee: Expr
     args: List[CallArg]
-    span: NodeSpan
-
-
-@dataclass(frozen=True)
-class Param:
-    name: str
-    default: Optional[Expr]
     span: NodeSpan
 
 
@@ -154,13 +169,6 @@ class StopStmt(Stmt):
 
 @dataclass(frozen=True)
 class SkipStmt(Stmt):
-    span: NodeSpan
-
-
-@dataclass(frozen=True)
-class IfBranch:
-    condition: Expr
-    body: List[Stmt]
     span: NodeSpan
 
 

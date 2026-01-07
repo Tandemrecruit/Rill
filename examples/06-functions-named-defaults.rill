@@ -1,4 +1,4 @@
-﻿define greet taking name = "world", punct = "!"
+define greet taking name = "world", punct = "!"
     give back "Hello, " + name + punct
 end
 show greet()

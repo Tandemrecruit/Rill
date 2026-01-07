@@ -1,4 +1,4 @@
-﻿define add taking a, b
+define add taking a, b
     give back a + b
 end
 show add(2, 3)
