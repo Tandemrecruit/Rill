@@ -23,11 +23,15 @@ from .ast import (
     UnaryExpr,
     BinaryExpr,
     GroupExpr,
+    ListExpr,
+    DictExpr,
+    FieldExpr,
     IndexExpr,
     CallExpr,
     Target,
     NameTarget,
     IndexTarget,
+    FieldTarget,
     Param,
     CallArg,
     NodeSpan,
@@ -293,6 +297,13 @@ class Interpreter:
 
             raise RillRuntimeError("Index assignment requires a list or map.", target.span)
 
+        if isinstance(target, FieldTarget):
+            obj = self._eval_expr(target.object)
+            if not isinstance(obj, dict):
+                raise RillRuntimeError("Field assignment requires a record or map.", target.span)
+            obj[target.name] = value
+            return
+
         raise RillRuntimeError(f"Unsupported target type: {type(target).__name__}", getattr(target, "span", None))
 
     # ---------- expressions ----------
@@ -395,6 +406,23 @@ class Interpreter:
 
         if isinstance(expr, GroupExpr):
             return self._eval_expr(expr.expr)
+
+        if isinstance(expr, ListExpr):
+            return [self._eval_expr(e) for e in expr.elements]
+
+        if isinstance(expr, DictExpr):
+            d: dict[Any, Any] = {}
+            for ent in expr.entries:
+                d[ent.key] = self._eval_expr(ent.value)
+            return d
+
+        if isinstance(expr, FieldExpr):
+            obj = self._eval_expr(expr.object)
+            if not isinstance(obj, dict):
+                raise RillRuntimeError("Field access requires a record or map.", expr.span)
+            if expr.name not in obj:
+                raise RillRuntimeError(f"Record/map field `{expr.name}` not found.", expr.span)
+            return obj[expr.name]
 
         if isinstance(expr, CallExpr):
             callee_val = self._eval_expr(expr.callee)

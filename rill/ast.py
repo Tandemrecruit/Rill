@@ -49,6 +49,14 @@ class Param:
     default: Optional[Expr]
     span: NodeSpan
 
+@dataclass(frozen=True)
+class DictEntry:
+    """Helper/supporting dataclass for DictExpr."""
+    key: str
+    value: Expr
+    span: NodeSpan
+
+
 
 # ---------- Expressions ----------
 
@@ -88,6 +96,25 @@ class GroupExpr(Expr):
     expr: Expr
     span: NodeSpan
 
+@dataclass(frozen=True)
+class ListExpr(Expr):
+    elements: List[Expr]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class DictExpr(Expr):
+    entries: List[DictEntry]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
+class FieldExpr(Expr):
+    object: Expr
+    name: str
+    span: NodeSpan
+
+
 
 @dataclass(frozen=True)
 class IndexExpr(Expr):
@@ -120,6 +147,13 @@ class IndexTarget(Target):
     collection: Expr
     index: Expr
     span: NodeSpan
+
+@dataclass(frozen=True)
+class FieldTarget(Target):
+    object: Expr
+    name: str
+    span: NodeSpan
+
 
 
 # ---------- Statements ----------
