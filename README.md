@@ -23,7 +23,7 @@ This repository is a single master repo for all Rill work (lexer → parser → 
     - `set <name> to …`
     - `change <target> to …`
     - `if …` / `otherwise` / `end`
-    - `repeat … times` / `repeat while …` / `repeat for i from … to … (step …)` / `repeat for i from … until … (step …)` / `end`
+    - `repeat … times` / `repeat while …` / `repeat for i from … to … (step …)` / `repeat for i from … until … (step …)` / `end` (e.g., `repeat for i from 1 to 5`; see `examples/08-repeat-range.rill` for full examples)
     - `stop` / `skip` (loop control)
     - `define … taking …` / `give back …`
   - Assignment targets: `name`, `name[index]`, `name.field` (and chained combos)

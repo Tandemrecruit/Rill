@@ -254,14 +254,7 @@ class Interpreter:
         Raises:
             RillRuntimeError: If `value` is a boolean, not a whole number, or is negative.
         """
-        if isinstance(value, bool):
-            raise RillRuntimeError("Expected a number.", span)
-        if isinstance(value, int):
-            n = value
-        elif isinstance(value, float) and value.is_integer():
-            n = int(value)
-        else:
-            raise RillRuntimeError("Repeat count must be a whole number.", span)
+        n = self._as_int(value, span, what="repeat count")
         if n < 0:
             raise RillRuntimeError("Repeat count cannot be negative.", span)
         return n

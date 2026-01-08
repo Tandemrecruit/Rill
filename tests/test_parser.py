@@ -12,6 +12,7 @@ from rill.ast import (
     IndexExpr,
     NameTarget,
     IndexTarget,
+    RepeatForRangeStmt,
 )
 from rill.token import TokenType
 
@@ -132,5 +133,26 @@ show j
 end
 """
     program = Parser(Lexer(src).lex()).parse()
-    assert program.statements[0].__class__.__name__ == "RepeatForRangeStmt"
-    assert program.statements[1].__class__.__name__ == "RepeatForRangeStmt"
+    
+    # First statement: repeat for i from 1 to 3
+    stmt0 = program.statements[0]
+    assert isinstance(stmt0, RepeatForRangeStmt)
+    assert stmt0.var == "i"
+    assert isinstance(stmt0.start, LiteralExpr)
+    assert stmt0.start.value == 1
+    assert isinstance(stmt0.end, LiteralExpr)
+    assert stmt0.end.value == 3
+    assert stmt0.inclusive is True
+    assert stmt0.step is None
+    
+    # Second statement: repeat for j from 0 until 2 step 1
+    stmt1 = program.statements[1]
+    assert isinstance(stmt1, RepeatForRangeStmt)
+    assert stmt1.var == "j"
+    assert isinstance(stmt1.start, LiteralExpr)
+    assert stmt1.start.value == 0
+    assert isinstance(stmt1.end, LiteralExpr)
+    assert stmt1.end.value == 2
+    assert stmt1.inclusive is False
+    assert isinstance(stmt1.step, LiteralExpr)
+    assert stmt1.step.value == 1

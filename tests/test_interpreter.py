@@ -170,3 +170,157 @@ end
 """
     with pytest.raises(RillRuntimeError):
         run_src(src)
+
+
+def test_repeat_for_range_zero_step_raises_error():
+    """Zero step should raise a RillRuntimeError."""
+    src = """repeat for i from 1 to 5 step 0
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError, match=r"step.*cannot be 0"):
+        run_src(src)
+
+
+def test_repeat_for_range_non_integer_start_end_step():
+    """Non-integer start/end/step inputs should raise validation errors."""
+    # Non-integer start
+    src1 = """repeat for i from 1.5 to 5
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError, match=r"Expected.*start"):
+        run_src(src1)
+
+    # Non-integer end
+    src2 = """repeat for i from 1 to 5.5
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError, match=r"Expected.*end"):
+        run_src(src2)
+
+    # Non-integer step
+    src3 = """repeat for i from 1 to 5 step 1.5
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError, match=r"Expected.*whole.*step"):
+        run_src(src3)
+
+    # Boolean start (should error with "Expected a start")
+    src4 = """repeat for i from true to 5
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError, match=r"Expected.*start"):
+        run_src(src4)
+
+    # String end (should error with "Expected a whole end")
+    src5 = """repeat for i from 1 to "5"
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError, match=r"Expected.*whole.*end"):
+        run_src(src5)
+
+
+def test_repeat_for_range_single_iteration():
+    """Single-iteration range (from 1 to 1) should execute once."""
+    src = """set count to 0
+repeat for i from 1 to 1
+    change count to count + 1
+    show i
+end
+show count
+"""
+    out = run_src(src)
+    assert out == ["1", "1"]
+
+
+def test_repeat_for_range_empty_range():
+    """Explicitly empty ranges (e.g., from 5 to 1 without negative step) produce zero iterations."""
+    # Ascending empty range (5 to 1 without step)
+    src1 = """set count to 0
+repeat for i from 5 to 1
+    change count to count + 1
+end
+show count
+"""
+    with pytest.raises(RillRuntimeError, match=r"Range is descending but no `step`"):
+        run_src(src1)
+
+    # Explicitly empty range with positive step (5 to 1 step 1)
+    src2 = """set count to 0
+repeat for i from 5 to 1 step 1
+    change count to count + 1
+end
+show count
+"""
+    with pytest.raises(RillRuntimeError, match=r"Descending range requires a negative `step`"):
+        run_src(src2)
+
+    # Empty range: from 1 until 1 (exclusive, should be zero iterations)
+    src3 = """set count to 0
+repeat for i from 1 until 1
+    change count to count + 1
+end
+show count
+"""
+    out3 = run_src(src3)
+    assert out3 == ["0"]
+
+
+def test_repeat_for_range_stop_skip_control_flow():
+    """Loop control flow (stop/skip) inside range loops behaves as expected."""
+    # stop inside range loop
+    src1 = """set count to 0
+repeat for i from 1 to 10
+    change count to count + 1
+    if i = 5
+        stop
+    end
+end
+show count
+"""
+    out1 = run_src(src1)
+    assert out1 == ["5"]  # Should stop at i=5, so count is 5 (1, 2, 3, 4, 5)
+
+    # skip inside range loop
+    src2 = """set count to 0
+repeat for i from 1 to 5
+    if i = 3
+        skip
+    end
+    change count to count + 1
+end
+show count
+"""
+    out2 = run_src(src2)
+    assert out2 == ["4"]  # Should skip i=3, so count is 4 (1, 2, 4, 5)
+
+    # stop with descending range
+    src3 = """set count to 0
+repeat for i from 10 to 1 step -1
+    change count to count + 1
+    if i = 5
+        stop
+    end
+end
+show count
+"""
+    out3 = run_src(src3)
+    assert out3 == ["6"]  # Should stop at i=5, so count is 6 (10, 9, 8, 7, 6, 5)
+
+    # skip with until (exclusive)
+    src4 = """set count to 0
+repeat for i from 0 until 5
+    if i = 2
+        skip
+    end
+    change count to count + 1
+end
+show count
+"""
+    out4 = run_src(src4)
+    assert out4 == ["4"]  # Should skip i=2, so count is 4 (0, 1, 3, 4)
