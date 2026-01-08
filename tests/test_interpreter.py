@@ -262,7 +262,7 @@ def test_repeat_for_range_step_validation():
     show i
 end
 """
-    with pytest.raises(RillRuntimeError, match="step.*cannot be 0"):
+    with pytest.raises(RillRuntimeError, match=r"step.*cannot be 0"):
         run_src(src_zero_step)
     
     # Ascending range with negative step should error
@@ -393,7 +393,7 @@ def test_repeat_for_range_type_errors():
     show i
 end
 """
-    with pytest.raises(RillRuntimeError, match="Expected.*start"):
+    with pytest.raises(RillRuntimeError, match=r"Expected.*start"):
         run_src(src_bool_start)
     
     # String end
@@ -401,7 +401,7 @@ end
     show i
 end
 """
-    with pytest.raises(RillRuntimeError, match="Expected.*end"):
+    with pytest.raises(RillRuntimeError, match=r"Expected.*end"):
         run_src(src_str_end)
     
     # Float step that's not a whole number
@@ -409,7 +409,7 @@ end
     show i
 end
 """
-    with pytest.raises(RillRuntimeError, match="Expected.*whole.*step"):
+    with pytest.raises(RillRuntimeError, match=r"Expected.*whole.*step"):
         run_src(src_float_step)
     
     # Float start that IS a whole number should work
