@@ -161,6 +161,9 @@ show total
 
 
 def test_repeat_for_range_descending_requires_step():
+    """
+    Given a descending `for` range (`i from 5 to 1`) with no explicit `step`, running the program raises a `RillRuntimeError`.
+    """
     src = """repeat for i from 5 to 1
     show i
 end

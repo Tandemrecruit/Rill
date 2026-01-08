@@ -222,15 +222,15 @@ class Parser:
         # repeat while <expr> NEWLINE <block> end
         # repeat <expr> times NEWLINE <block> end
         """
-        Parse a `repeat` statement, supporting both `repeat while <expr>` and `repeat <expr> times` forms.
+        Parse a `repeat` statement and return the corresponding AST statement node.
         
-        Parses either a conditional repeat (`repeat while <expr>`) or a counted repeat (`repeat <expr> times`), consumes the body up to the closing `end`, and returns the corresponding AST statement node with a span covering the whole construct.
+        Parses one of the supported `repeat` forms: a conditional `repeat while <expr> ... end`, a range `repeat for <ident> from <start> to|until <end> (step <expr>)? ... end`, or a counted `repeat <expr> times ... end`.
         
         Returns:
-            RepeatWhileStmt or RepeatTimesStmt: A `RepeatWhileStmt` for the `repeat while` form, or a `RepeatTimesStmt` for the counted `repeat ... times` form.
+            RepeatWhileStmt, RepeatForRangeStmt, or RepeatTimesStmt: The AST node representing the parsed repeat form.
         
         Raises:
-            RillParseError: If required tokens are missing or the repeat syntax is malformed (for example missing `times`, missing newline after the header, or missing closing `end`).
+            RillParseError: If the repeat header or body is malformed or a required token (e.g., `times`, `to`/`until`, or `end`) is missing.
         """
         if self._match(TokenType.WHILE):
             cond = self._expression()

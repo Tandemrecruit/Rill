@@ -121,6 +121,9 @@ def test_parse_repeat_times_and_while():
     assert program.statements[1].__class__.__name__ == "RepeatWhileStmt"
 
 def test_parse_repeat_for_range_to_and_until():
+    """
+    Given source containing two repeat-for-range blocks (one using "to", one using "until" with a step), parsing should produce two top-level RepeatForRangeStmt nodes.
+    """
     src = """repeat for i from 1 to 3
 show i
 end
