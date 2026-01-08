@@ -155,6 +155,8 @@ Milestones are tracked via annotated git tags (recommended format: `v0-<mileston
 - `v0-interpreter`
 - `v0-control-flow`
 - `v0-functions`
+- `v0-range-loop`
+- `v0-collections`
 
 To push tags to GitHub:
 
@@ -173,15 +175,11 @@ git push --tags
 2. More loop forms
    - `for each name in names` (iteration rules)
 
-3. Functions
-   - `define … taking …`
-   - `give back`
-
-4. Data structures + tables
+3. Data structures + tables
    - records vs maps
    - table operators and aggregates
 
-5. Differentiators
+4. Differentiators
    - `trace` and `explain` execution modes
    - teaching-grade error messages
 

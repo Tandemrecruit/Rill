@@ -417,7 +417,7 @@ class Interpreter:
                     raise RillRuntimeError("List index must be an integer.", target.span)
                 if idx < 0:
                     raise RillRuntimeError(
-                        "Negative indices are not allowed. Use `last of ...` instead.", target.span
+                        "Negative indices are not allowed in v0.", target.span
                     )
                 if idx >= len(coll):
                     raise RillRuntimeError(f"List index {idx} is out of range (length {len(coll)}).", target.span)
@@ -574,7 +574,7 @@ class Interpreter:
                 if not isinstance(idx, int):
                     raise RillRuntimeError("List index must be an integer.", expr.span)
                 if idx < 0:
-                    raise RillRuntimeError("Negative indices are not allowed. Use `last of ...` instead.", expr.span)
+                    raise RillRuntimeError("Negative indices are not allowed in v0.", expr.span)
                 if idx >= len(coll):
                     raise RillRuntimeError(f"List index {idx} is out of range (length {len(coll)}).", expr.span)
                 return coll[idx]
