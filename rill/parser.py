@@ -38,6 +38,7 @@ from .ast import (
     IfStmt,
     RepeatTimesStmt,
     RepeatWhileStmt,
+    RepeatForRangeStmt,
 )
 
 
@@ -221,15 +222,15 @@ class Parser:
         # repeat while <expr> NEWLINE <block> end
         # repeat <expr> times NEWLINE <block> end
         """
-        Parse a `repeat` statement, supporting both `repeat while <expr>` and `repeat <expr> times` forms.
+        Parse a `repeat` statement and return the corresponding AST statement node.
         
-        Parses either a conditional repeat (`repeat while <expr>`) or a counted repeat (`repeat <expr> times`), consumes the body up to the closing `end`, and returns the corresponding AST statement node with a span covering the whole construct.
+        Parses one of the supported `repeat` forms: a conditional `repeat while <expr> ... end`, a range `repeat for <ident> from <start> to|until <end> (step <expr>)? ... end`, or a counted `repeat <expr> times ... end`.
         
         Returns:
-            RepeatWhileStmt or RepeatTimesStmt: A `RepeatWhileStmt` for the `repeat while` form, or a `RepeatTimesStmt` for the counted `repeat ... times` form.
+            RepeatWhileStmt, RepeatForRangeStmt, or RepeatTimesStmt: The AST node representing the parsed repeat form.
         
         Raises:
-            RillParseError: If required tokens are missing or the repeat syntax is malformed (for example missing `times`, missing newline after the header, or missing closing `end`).
+            RillParseError: If the repeat header or body is malformed or a required token (e.g., `times`, `to`/`until`, or `end`) is missing.
         """
         if self._match(TokenType.WHILE):
             cond = self._expression()
@@ -237,6 +238,40 @@ class Parser:
             body = self._block({TokenType.END})
             end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
             return RepeatWhileStmt(condition=cond, body=body, span=span_from_tokens(repeat_tok, end_tok))
+
+        # repeat for i from A to B (step S)?
+        # repeat for i from A until B (step S)?
+        if self._match(TokenType.FOR):
+            var_tok = self._consume(TokenType.IDENT, "Expected a loop variable name after `repeat for`.")
+            self._consume(TokenType.FROM, "Expected `from` after loop variable name.")
+            start_expr = self._expression()
+
+            inclusive: bool
+            if self._match(TokenType.TO):
+                inclusive = True
+            elif self._match(TokenType.UNTIL):
+                inclusive = False
+            else:
+                raise self._error(self._peek(), "Expected `to` or `until` after range start expression.")
+
+            end_expr = self._expression()
+
+            step_expr = None
+            if self._match(TokenType.STEP):
+                step_expr = self._expression()
+
+            self._require_newline("Expected a newline after the `repeat for ...` header.")
+            body = self._block({TokenType.END})
+            end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
+            return RepeatForRangeStmt(
+                var=var_tok.lexeme,
+                start=start_expr,
+                end=end_expr,
+                inclusive=inclusive,
+                step=step_expr,
+                body=body,
+                span=span_from_tokens(repeat_tok, end_tok),
+            )
 
         count = self._expression()
         self._consume(TokenType.TIMES, "Expected `times` after repeat count.")

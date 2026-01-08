@@ -1,0 +1,19 @@
+set total to 0
+
+repeat for i from 1 to 5
+    change total to total + i
+end
+
+show total
+
+set c to 0
+
+repeat for i from 0 until 5
+    change c to c + 1
+end
+
+show c
+
+repeat for i from 5 to 1 step -2
+    show i
+end

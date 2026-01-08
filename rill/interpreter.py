@@ -15,6 +15,7 @@ from .ast import (
     IfStmt,
     RepeatTimesStmt,
     RepeatWhileStmt,
+    RepeatForRangeStmt,
     DefineStmt,
     GiveBackStmt,
     Expr,
@@ -176,9 +177,25 @@ class Interpreter:
             self._exec_repeat_while(stmt)
             return
 
+        if isinstance(stmt, RepeatForRangeStmt):
+            self._exec_repeat_for_range(stmt)
+            return
+
         raise RillRuntimeError(f"Unsupported statement type: {type(stmt).__name__}", getattr(stmt, "span", None))
 
     def _exec_if(self, stmt: IfStmt) -> None:
+        """
+        Execute an if-statement by evaluating branches in order and running the first matching branch body (or the else body if provided).
+        
+        Parameters:
+            stmt (IfStmt): AST node containing ordered branches (each with a condition and body) and an optional else_body.
+        
+        Raises:
+            RillRuntimeError: If any branch condition does not evaluate to a boolean.
+        
+        Description:
+            For each branch, evaluates its condition; when a condition is true, executes that branch's body in a new scope and stops. If no branch matches and an else_body exists, executes the else_body in a new scope. Each executed branch or else body runs with its own pushed scope which is popped after execution.
+        """
         for br in stmt.branches:
             cond_val = self._eval_expr(br.condition)
             if not isinstance(cond_val, bool):
@@ -200,15 +217,44 @@ class Interpreter:
             finally:
                 self.env.pop_scope()
 
-    def _as_nonneg_int(self, value: Any, span) -> int:
+    def _as_int(self, value: Any, span, *, what: str = "number") -> int:
+        """
+        Convert a value to a whole integer or raise a runtime error.
+        
+        Parameters:
+            value: The value to coerce to an int.
+            span: AST node span used for error reporting when raising.
+            what (str): Noun used in error messages (defaults to "number").
+        
+        Returns:
+            int: The integer value (floats that represent whole numbers are converted).
+        
+        Raises:
+            RillRuntimeError: If `value` is a boolean or not a whole number.
+        """
         if isinstance(value, bool):
-            raise RillRuntimeError("Expected a number.", span)
+            raise RillRuntimeError(f"Expected a {what}.", span)
         if isinstance(value, int):
-            n = value
-        elif isinstance(value, float) and value.is_integer():
-            n = int(value)
-        else:
-            raise RillRuntimeError("Repeat count must be a whole number.", span)
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        raise RillRuntimeError(f"Expected a whole {what}.", span)
+
+    def _as_nonneg_int(self, value: Any, span) -> int:
+        """
+        Convert a runtime value into a non-negative integer suitable for repeat counts.
+        
+        Parameters:
+            value: The value to coerce (may be int or float with integer value).
+            span: AST node span used for error reporting.
+        
+        Returns:
+            The coerced integer value, guaranteed to be greater than or equal to zero.
+        
+        Raises:
+            RillRuntimeError: If `value` is a boolean, not a whole number, or is negative.
+        """
+        n = self._as_int(value, span, what="repeat count")
         if n < 0:
             raise RillRuntimeError("Repeat count cannot be negative.", span)
         return n
@@ -235,6 +281,11 @@ class Interpreter:
             self._loop_depth -= 1
 
     def _exec_repeat_while(self, stmt: RepeatWhileStmt) -> None:
+        """
+        Execute a `repeat while` loop statement until its condition becomes false.
+        
+        Evaluates the loop condition before each iteration and, while it is `True`, pushes a new scope and executes the loop body statements. Manages loop nesting depth for runtime checks. Handles loop-control exceptions so that `_SkipLoop` skips the remainder of the current iteration and `_StopLoop` exits the loop. Raises a runtime error if the loop condition does not evaluate to a boolean.
+        """
         self._loop_depth += 1
         try:
             while True:
@@ -258,20 +309,99 @@ class Interpreter:
         finally:
             self._loop_depth -= 1
 
-    def _assign_target(self, target: Target, value: Any) -> None:
+    def _exec_repeat_for_range(self, stmt: RepeatForRangeStmt) -> None:
         """
-        Assigns a value to a target location, which may be a variable name, an indexed element, or an object field.
+        Execute a for-range repeat statement, iterating from start to end with an optional step.
+        
+        Evaluates the `start`, `end`, and optional `step` expressions, enforces integer-only bounds and valid step semantics (non-zero and directionally consistent), and for each iteration pushes a new scope, binds the loop variable to the current index, executes the loop body, and then pops the scope. Honors the statement's `inclusive` flag when testing the end condition and supports `SkipStmt` (skips remainder of iteration) and `StopStmt` (breaks out of the loop) control flow.
         
         Parameters:
-            target (Target): The assignment target; supported variants are NameTarget, IndexTarget, and FieldTarget.
-                - NameTarget: binds the value to a variable in the current environment.
-                - IndexTarget: assigns into a list (by integer index) or a dict (by key).
-                - FieldTarget: assigns into a dict-like object's named field.
+            stmt (RepeatForRangeStmt): AST node describing the for-range loop (contains `start`, `end`, optional `step`, loop `var`, `inclusive` flag, and loop `body`).
+        
+        Raises:
+            RillRuntimeError: If `start`, `end`, or `step` are not whole numbers, if `step` is zero, or if `step` direction is inconsistent with `start`/`end`.
+        """
+        start_val = self._eval_expr(stmt.start)
+        end_val = self._eval_expr(stmt.end)
+
+        start_i = self._as_int(start_val, stmt.start.span, what="start")
+        end_i = self._as_int(end_val, stmt.end.span, what="end")
+
+        # step rules
+        if stmt.step is None:
+            if start_i > end_i:
+                raise RillRuntimeError(
+                    "Range is descending but no `step` was provided. Use `step -1` for a countdown.",
+                    stmt.span,
+                )
+            step_i = 1
+        else:
+            step_val = self._eval_expr(stmt.step)
+            step_i = self._as_int(step_val, stmt.step.span, what="step")
+
+        if step_i == 0:
+            raise RillRuntimeError("`step` cannot be 0.", stmt.span)
+
+        # direction checks (only meaningful when start != end)
+        if start_i < end_i and step_i < 0:
+            raise RillRuntimeError("Ascending range requires a positive `step`.", stmt.span)
+        if start_i > end_i and step_i > 0:
+            raise RillRuntimeError("Descending range requires a negative `step`.", stmt.span)
+
+        def should_continue(i: int) -> bool:
+            """
+            Determine whether the loop should continue for the current index `i` based on the loop's step direction, end bound, and inclusivity.
+            
+            Parameters:
+                i (int): The current loop index.
+            
+            Returns:
+                bool: `True` if `i` is within the loop bounds (taking `step_i` sign and `stmt.inclusive` into account), `False` otherwise.
+            """
+            if step_i > 0:
+                return i <= end_i if stmt.inclusive else i < end_i
+            else:
+                return i >= end_i if stmt.inclusive else i > end_i
+
+        self._loop_depth += 1
+        try:
+            i = start_i
+            while should_continue(i):
+                self.env.push_scope()
+                try:
+                    self.env.define(stmt.var, i, stmt.span)
+                    broke = False
+                    try:
+                        for s in stmt.body:
+                            self._exec_stmt(s)
+                    except _SkipLoop:
+                        pass
+                    except _StopLoop:
+                        broke = True
+                finally:
+                    self.env.pop_scope()
+
+                if broke:
+                    break
+
+                i += step_i
+        finally:
+            self._loop_depth -= 1
+
+
+    def _assign_target(self, target: Target, value: Any) -> None:
+        """
+        Assign a value to a target location: a variable name, an indexed element, or an object field.
+        
+        NameTarget binds the value in the current environment. IndexTarget assigns into a list (requires an integer index that is >= 0 and less than the list length) or into a dict by key. FieldTarget assigns a named field on a dict-like object.
+        
+        Parameters:
+            target (Target): The assignment target (NameTarget, IndexTarget, or FieldTarget).
             value (Any): The value to assign.
         
         Raises:
-            RillRuntimeError: If the target variant is unsupported; if IndexTarget is used on a non-list/non-dict;
-                if a list index is not an integer, is negative, or is out of range; or if FieldTarget is used on a non-dict.
+            RillRuntimeError: If the target type is unsupported; if IndexTarget is used on a non-list/non-dict; if a list index is not an integer, is negative, or is out of range.
+            FieldTypeError: If FieldTarget is used on a non-dict object.
         """
         if isinstance(target, NameTarget):
             self.env.assign(target.name, value, target.span)

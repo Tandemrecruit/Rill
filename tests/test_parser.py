@@ -1,5 +1,7 @@
 from rill.lexer import Lexer
+import pytest
 from rill.parser import Parser
+from rill.errors import RillParseError
 from rill.ast import (
     Program,
     ShowStmt,
@@ -12,6 +14,10 @@ from rill.ast import (
     IndexExpr,
     NameTarget,
     IndexTarget,
+    RepeatForRangeStmt,
+    IfStmt,
+    RepeatTimesStmt,
+    RepeatWhileStmt,
 )
 from rill.token import TokenType
 
@@ -112,10 +118,224 @@ def test_parse_if_otherwise():
     src = "if true\nshow 1\notherwise\nshow 2\nend\n"
     program = Parser(Lexer(src).lex()).parse()
     assert len(program.statements) == 1
-    assert program.statements[0].__class__.__name__ == "IfStmt"
+    assert isinstance(program.statements[0], IfStmt)
 
 def test_parse_repeat_times_and_while():
     src = "repeat 3 times\nshow 1\nend\nrepeat while false\nshow 2\nend\n"
     program = Parser(Lexer(src).lex()).parse()
-    assert program.statements[0].__class__.__name__ == "RepeatTimesStmt"
-    assert program.statements[1].__class__.__name__ == "RepeatWhileStmt"
+    assert isinstance(program.statements[0], RepeatTimesStmt)
+    assert isinstance(program.statements[1], RepeatWhileStmt)
+
+def test_parse_repeat_for_range_to_and_until():
+    """
+    Given source containing two repeat-for-range blocks (one using "to", one using "until" with a step), parsing should produce two top-level RepeatForRangeStmt nodes.
+    """
+    src = """repeat for i from 1 to 3
+show i
+end
+repeat for j from 0 until 2 step 1
+show j
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+
+    # First statement: repeat for i from 1 to 3
+    stmt0 = program.statements[0]
+    assert isinstance(stmt0, RepeatForRangeStmt)
+    assert stmt0.var == "i"
+    assert isinstance(stmt0.start, LiteralExpr)
+    assert stmt0.start.value == 1
+    assert isinstance(stmt0.end, LiteralExpr)
+    assert stmt0.end.value == 3
+    assert stmt0.inclusive is True
+    assert stmt0.step is None
+    
+    # Second statement: repeat for j from 0 until 2 step 1
+    stmt1 = program.statements[1]
+    assert isinstance(stmt1, RepeatForRangeStmt)
+    assert stmt1.var == "j"
+    assert isinstance(stmt1.start, LiteralExpr)
+    assert stmt1.start.value == 0
+    assert isinstance(stmt1.end, LiteralExpr)
+    assert stmt1.end.value == 2
+    assert stmt1.inclusive is False
+    assert isinstance(stmt1.step, LiteralExpr)
+    assert stmt1.step.value == 1
+
+
+def test_parse_repeat_for_range_fields():
+    """
+    Test that RepeatForRangeStmt fields are populated correctly for both 'to' and 'until'.
+    """
+    src_to = """repeat for x from 1 to 10 step 2
+show x
+end
+"""
+    program = Parser(Lexer(src_to).lex()).parse()
+    stmt = program.statements[0]
+    assert isinstance(stmt, RepeatForRangeStmt)
+    assert stmt.var == "x"
+    assert stmt.inclusive is True
+    assert stmt.step is not None
+    
+    src_until = """repeat for y from 0 until 5
+show y
+end
+"""
+    program2 = Parser(Lexer(src_until).lex()).parse()
+    stmt2 = program2.statements[0]
+    assert isinstance(stmt2, RepeatForRangeStmt)
+    assert stmt2.var == "y"
+    assert stmt2.inclusive is False
+    assert stmt2.step is None
+
+
+def test_parse_repeat_for_range_missing_tokens():
+    """
+    Test that parsing fails appropriately when required tokens are missing.
+    """
+    # Missing 'from'
+    src_no_from = """repeat for i 1 to 5
+show i
+end
+"""
+    with pytest.raises(RillParseError):
+        Parser(Lexer(src_no_from).lex()).parse()
+    
+    # Missing 'to' or 'until'
+    src_no_to = """repeat for i from 1 5
+show i
+end
+"""
+    with pytest.raises(RillParseError):
+        Parser(Lexer(src_no_to).lex()).parse()
+    
+    # Missing 'end'
+    src_no_end = """repeat for i from 1 to 5
+show i
+"""
+    with pytest.raises(RillParseError):
+        Parser(Lexer(src_no_end).lex()).parse()
+    
+    # Missing loop variable name
+    src_no_var = """repeat for from 1 to 5
+show i
+end
+"""
+    with pytest.raises(RillParseError):
+        Parser(Lexer(src_no_var).lex()).parse()
+
+
+def test_parse_repeat_for_range_complex_expressions():
+    """
+    Test that start, end, and step can be complex expressions.
+    """
+    src = """repeat for i from 1 + 2 to 5 * 2 step 3 - 1
+    show i
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    stmt = program.statements[0]
+    assert isinstance(stmt, RepeatForRangeStmt)
+    # Verify that start, end, and step are BinaryExpr nodes
+    assert isinstance(stmt.start, BinaryExpr)
+    assert isinstance(stmt.end, BinaryExpr)
+    assert isinstance(stmt.step, BinaryExpr)
+
+
+def test_parse_repeat_for_range_nested():
+    """
+    Test that nested for-range loops parse correctly.
+    """
+    src = """repeat for i from 1 to 3
+    repeat for j from 1 to 2
+        show i
+        show j
+    end
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    outer = program.statements[0]
+    assert isinstance(outer, RepeatForRangeStmt)
+    assert len(outer.body) == 1
+    inner = outer.body[0]
+    assert isinstance(inner, RepeatForRangeStmt)
+    assert len(inner.body) == 2
+
+
+def test_parse_repeat_for_range_with_other_statements():
+    """
+    Test that for-range loops can contain various statement types.
+    """
+    src = """repeat for i from 1 to 5
+    set x to i * 2
+    if x > 5
+        show "big"
+    otherwise
+        show "small"
+    end
+    change x to x + 1
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    stmt = program.statements[0]
+    assert isinstance(stmt, RepeatForRangeStmt)
+    assert len(stmt.body) == 3
+    assert isinstance(stmt.body[0], SetStmt)
+    assert isinstance(stmt.body[1], IfStmt)
+    assert isinstance(stmt.body[2], ChangeStmt)
+
+
+def test_parse_repeat_for_range_descending():
+    """
+    Test parsing of descending ranges with negative steps.
+    """
+    src = """repeat for i from 10 to 1 step -2
+    show i
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    stmt = program.statements[0]
+    assert isinstance(stmt, RepeatForRangeStmt)
+    assert stmt.var == "i"
+    assert stmt.inclusive is True
+    # Verify step is a unary minus expression
+    assert isinstance(stmt.step, UnaryExpr)
+
+
+def test_parse_repeat_for_range_variable_names():
+    """
+    Test that various valid identifier names work as loop variables.
+    """
+    src = """repeat for counter from 1 to 3
+    show counter
+end
+repeat for item_index from 0 until 2
+    show item_index
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    assert isinstance(program.statements[0], RepeatForRangeStmt)
+    assert program.statements[0].var == "counter"
+    assert isinstance(program.statements[1], RepeatForRangeStmt)
+    assert program.statements[1].var == "item_index"
+
+
+def test_parse_repeat_all_forms_together():
+    """
+    Test that all three repeat forms (times, while, for-range) can coexist and parse correctly.
+    """
+    src = """repeat 3 times
+    show "a"
+end
+repeat while true
+    stop
+end
+repeat for i from 1 to 5
+    show i
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    assert isinstance(program.statements[0], RepeatTimesStmt)
+    assert isinstance(program.statements[1], RepeatWhileStmt)
+    assert isinstance(program.statements[2], RepeatForRangeStmt)
