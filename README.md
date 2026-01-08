@@ -23,7 +23,7 @@ This repository is a single master repo for all Rill work (lexer → parser → 
     - `set <name> to …`
     - `change <target> to …`
     - `if …` / `otherwise` / `end`
-    - `repeat … times` / `repeat while …` / `end`
+    - `repeat … times` / `repeat while …` / `repeat for i from … to … (step …)` / `repeat for i from … until … (step …)` / `end`
     - `stop` / `skip` (loop control)
     - `define … taking …` / `give back …`
   - Assignment targets: `name`, `name[index]`, `name.field` (and chained combos)
@@ -41,7 +41,7 @@ This repository is a single master repo for all Rill work (lexer → parser → 
 - `trace` / `explain` modes
 - file module (`file.load` / `file.save`)
 - testing blocks (`check` / `expect`)
-- additional loop forms (e.g., `repeat … from … to … step …`)
+- for-each loops (`for each name in names`)
 
 ---
 
@@ -171,7 +171,7 @@ git push --tags
    - More expression forms as needed by upcoming syntax
 
 2. More loop forms
-   - `repeat … from … to … step …` (range/step rules)
+   - `for each name in names` (iteration rules)
 
 3. Functions
    - `define … taking …`

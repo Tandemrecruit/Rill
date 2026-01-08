@@ -38,6 +38,7 @@ from .ast import (
     IfStmt,
     RepeatTimesStmt,
     RepeatWhileStmt,
+    RepeatForRangeStmt,
 )
 
 
@@ -237,6 +238,40 @@ class Parser:
             body = self._block({TokenType.END})
             end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
             return RepeatWhileStmt(condition=cond, body=body, span=span_from_tokens(repeat_tok, end_tok))
+
+        # repeat for i from A to B (step S)?
+        # repeat for i from A until B (step S)?
+        if self._match(TokenType.FOR):
+            var_tok = self._consume(TokenType.IDENT, "Expected a loop variable name after `repeat for`.")
+            self._consume(TokenType.FROM, "Expected `from` after loop variable name.")
+            start_expr = self._expression()
+
+            inclusive: bool
+            if self._match(TokenType.TO):
+                inclusive = True
+            elif self._match(TokenType.UNTIL):
+                inclusive = False
+            else:
+                raise self._error(self._peek(), "Expected `to` or `until` after range start expression.")
+
+            end_expr = self._expression()
+
+            step_expr = None
+            if self._match(TokenType.STEP):
+                step_expr = self._expression()
+
+            self._require_newline("Expected a newline after the `repeat for ...` header.")
+            body = self._block({TokenType.END})
+            end_tok = self._consume(TokenType.END, "Expected `end` to close the `repeat` block.")
+            return RepeatForRangeStmt(
+                var=var_tok.lexeme,
+                start=start_expr,
+                end=end_expr,
+                inclusive=inclusive,
+                step=step_expr,
+                body=body,
+                span=span_from_tokens(repeat_tok, end_tok),
+            )
 
         count = self._expression()
         self._consume(TokenType.TIMES, "Expected `times` after repeat count.")

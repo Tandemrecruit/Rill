@@ -127,3 +127,43 @@ def test_repeat_allows_set_each_iteration():
     ])
     out = run_src(src)
     assert out == ["0"]
+
+def test_repeat_for_range_inclusive_until_and_step():
+    # inclusive `to`
+    src = """set total to 0
+repeat for i from 1 to 5
+    change total to total + i
+end
+show total
+"""
+    out = run_src(src)
+    assert out == ["15"]
+
+    # exclusive `until`
+    src2 = """set c to 0
+repeat for i from 0 until 5
+    change c to c + 1
+end
+show c
+"""
+    out2 = run_src(src2)
+    assert out2 == ["5"]
+
+    # descending with explicit negative step
+    src3 = """set total to 0
+repeat for i from 5 to 1 step -1
+    change total to total + i
+end
+show total
+"""
+    out3 = run_src(src3)
+    assert out3 == ["15"]
+
+
+def test_repeat_for_range_descending_requires_step():
+    src = """repeat for i from 5 to 1
+    show i
+end
+"""
+    with pytest.raises(RillRuntimeError):
+        run_src(src)

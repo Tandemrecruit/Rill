@@ -228,5 +228,16 @@ class RepeatWhileStmt(Stmt):
 
 
 @dataclass(frozen=True)
+class RepeatForRangeStmt(Stmt):
+    var: str
+    start: Expr
+    end: Expr
+    inclusive: bool  # True for `to`, False for `until`
+    step: Optional[Expr]  # None means default step (see interpreter rules)
+    body: List[Stmt]
+    span: NodeSpan
+
+
+@dataclass(frozen=True)
 class Program:
     statements: List[Stmt]

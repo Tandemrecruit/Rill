@@ -15,6 +15,7 @@ from .ast import (
     IfStmt,
     RepeatTimesStmt,
     RepeatWhileStmt,
+    RepeatForRangeStmt,
     DefineStmt,
     GiveBackStmt,
     Expr,
@@ -176,6 +177,10 @@ class Interpreter:
             self._exec_repeat_while(stmt)
             return
 
+        if isinstance(stmt, RepeatForRangeStmt):
+            self._exec_repeat_for_range(stmt)
+            return
+
         raise RillRuntimeError(f"Unsupported statement type: {type(stmt).__name__}", getattr(stmt, "span", None))
 
     def _exec_if(self, stmt: IfStmt) -> None:
@@ -199,6 +204,15 @@ class Interpreter:
                     self._exec_stmt(s)
             finally:
                 self.env.pop_scope()
+
+    def _as_int(self, value: Any, span, *, what: str = "number") -> int:
+        if isinstance(value, bool):
+            raise RillRuntimeError(f"Expected a {what}.", span)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        raise RillRuntimeError(f"Expected a whole {what}.", span)
 
     def _as_nonneg_int(self, value: Any, span) -> int:
         if isinstance(value, bool):
@@ -257,6 +271,66 @@ class Interpreter:
                     self.env.pop_scope()
         finally:
             self._loop_depth -= 1
+
+    def _exec_repeat_for_range(self, stmt: RepeatForRangeStmt) -> None:
+        start_val = self._eval_expr(stmt.start)
+        end_val = self._eval_expr(stmt.end)
+
+        start_i = self._as_int(start_val, stmt.start.span, what="start")
+        end_i = self._as_int(end_val, stmt.end.span, what="end")
+
+        # step rules
+        if stmt.step is None:
+            if start_i > end_i:
+                raise RillRuntimeError(
+                    "Range is descending but no `step` was provided. Use `step -1` for a countdown.",
+                    stmt.span,
+                )
+            step_i = 1
+        else:
+            step_val = self._eval_expr(stmt.step)
+            step_i = self._as_int(step_val, stmt.step.span, what="step")
+
+        if step_i == 0:
+            raise RillRuntimeError("`step` cannot be 0.", stmt.span)
+
+        # direction checks (only meaningful when start != end)
+        if start_i < end_i and step_i < 0:
+            raise RillRuntimeError("Ascending range requires a positive `step`.", stmt.span)
+        if start_i > end_i and step_i > 0:
+            raise RillRuntimeError("Descending range requires a negative `step`.", stmt.span)
+
+        def should_continue(i: int) -> bool:
+            if step_i > 0:
+                return i <= end_i if stmt.inclusive else i < end_i
+            else:
+                return i >= end_i if stmt.inclusive else i > end_i
+
+        self._loop_depth += 1
+        try:
+            i = start_i
+            while should_continue(i):
+                self.env.push_scope()
+                try:
+                    self.env.define(stmt.var, i, stmt.span)
+                    broke = False
+                    try:
+                        for s in stmt.body:
+                            self._exec_stmt(s)
+                    except _SkipLoop:
+                        pass
+                    except _StopLoop:
+                        broke = True
+                finally:
+                    self.env.pop_scope()
+
+                if broke:
+                    break
+
+                i += step_i
+        finally:
+            self._loop_depth -= 1
+
 
     def _assign_target(self, target: Target, value: Any) -> None:
         """

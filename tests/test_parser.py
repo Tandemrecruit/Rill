@@ -119,3 +119,15 @@ def test_parse_repeat_times_and_while():
     program = Parser(Lexer(src).lex()).parse()
     assert program.statements[0].__class__.__name__ == "RepeatTimesStmt"
     assert program.statements[1].__class__.__name__ == "RepeatWhileStmt"
+
+def test_parse_repeat_for_range_to_and_until():
+    src = """repeat for i from 1 to 3
+show i
+end
+repeat for j from 0 until 2 step 1
+show j
+end
+"""
+    program = Parser(Lexer(src).lex()).parse()
+    assert program.statements[0].__class__.__name__ == "RepeatForRangeStmt"
+    assert program.statements[1].__class__.__name__ == "RepeatForRangeStmt"
