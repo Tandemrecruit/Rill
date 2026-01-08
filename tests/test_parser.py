@@ -15,6 +15,9 @@ from rill.ast import (
     NameTarget,
     IndexTarget,
     RepeatForRangeStmt,
+    IfStmt,
+    RepeatTimesStmt,
+    RepeatWhileStmt,
 )
 from rill.token import TokenType
 
@@ -115,13 +118,13 @@ def test_parse_if_otherwise():
     src = "if true\nshow 1\notherwise\nshow 2\nend\n"
     program = Parser(Lexer(src).lex()).parse()
     assert len(program.statements) == 1
-    assert program.statements[0].__class__.__name__ == "IfStmt"
+    assert isinstance(program.statements[0], IfStmt)
 
 def test_parse_repeat_times_and_while():
     src = "repeat 3 times\nshow 1\nend\nrepeat while false\nshow 2\nend\n"
     program = Parser(Lexer(src).lex()).parse()
-    assert program.statements[0].__class__.__name__ == "RepeatTimesStmt"
-    assert program.statements[1].__class__.__name__ == "RepeatWhileStmt"
+    assert isinstance(program.statements[0], RepeatTimesStmt)
+    assert isinstance(program.statements[1], RepeatWhileStmt)
 
 def test_parse_repeat_for_range_to_and_until():
     """
@@ -170,7 +173,7 @@ end
 """
     program = Parser(Lexer(src_to).lex()).parse()
     stmt = program.statements[0]
-    assert stmt.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(stmt, RepeatForRangeStmt)
     assert stmt.var == "x"
     assert stmt.inclusive is True
     assert stmt.step is not None
@@ -181,7 +184,7 @@ end
 """
     program2 = Parser(Lexer(src_until).lex()).parse()
     stmt2 = program2.statements[0]
-    assert stmt2.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(stmt2, RepeatForRangeStmt)
     assert stmt2.var == "y"
     assert stmt2.inclusive is False
     assert stmt2.step is None
@@ -233,11 +236,11 @@ end
 """
     program = Parser(Lexer(src).lex()).parse()
     stmt = program.statements[0]
-    assert stmt.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(stmt, RepeatForRangeStmt)
     # Verify that start, end, and step are BinaryExpr nodes
-    assert stmt.start.__class__.__name__ == "BinaryExpr"
-    assert stmt.end.__class__.__name__ == "BinaryExpr"
-    assert stmt.step.__class__.__name__ == "BinaryExpr"
+    assert isinstance(stmt.start, BinaryExpr)
+    assert isinstance(stmt.end, BinaryExpr)
+    assert isinstance(stmt.step, BinaryExpr)
 
 
 def test_parse_repeat_for_range_nested():
@@ -253,10 +256,10 @@ end
 """
     program = Parser(Lexer(src).lex()).parse()
     outer = program.statements[0]
-    assert outer.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(outer, RepeatForRangeStmt)
     assert len(outer.body) == 1
     inner = outer.body[0]
-    assert inner.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(inner, RepeatForRangeStmt)
     assert len(inner.body) == 2
 
 
@@ -276,11 +279,11 @@ end
 """
     program = Parser(Lexer(src).lex()).parse()
     stmt = program.statements[0]
-    assert stmt.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(stmt, RepeatForRangeStmt)
     assert len(stmt.body) == 3
-    assert stmt.body[0].__class__.__name__ == "SetStmt"
-    assert stmt.body[1].__class__.__name__ == "IfStmt"
-    assert stmt.body[2].__class__.__name__ == "ChangeStmt"
+    assert isinstance(stmt.body[0], SetStmt)
+    assert isinstance(stmt.body[1], IfStmt)
+    assert isinstance(stmt.body[2], ChangeStmt)
 
 
 def test_parse_repeat_for_range_descending():
@@ -293,11 +296,11 @@ end
 """
     program = Parser(Lexer(src).lex()).parse()
     stmt = program.statements[0]
-    assert stmt.__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(stmt, RepeatForRangeStmt)
     assert stmt.var == "i"
     assert stmt.inclusive is True
     # Verify step is a unary minus expression
-    assert stmt.step.__class__.__name__ == "UnaryExpr"
+    assert isinstance(stmt.step, UnaryExpr)
 
 
 def test_parse_repeat_for_range_variable_names():
@@ -312,9 +315,9 @@ repeat for item_index from 0 until 2
 end
 """
     program = Parser(Lexer(src).lex()).parse()
-    assert program.statements[0].__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(program.statements[0], RepeatForRangeStmt)
     assert program.statements[0].var == "counter"
-    assert program.statements[1].__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(program.statements[1], RepeatForRangeStmt)
     assert program.statements[1].var == "item_index"
 
 
@@ -333,6 +336,6 @@ repeat for i from 1 to 5
 end
 """
     program = Parser(Lexer(src).lex()).parse()
-    assert program.statements[0].__class__.__name__ == "RepeatTimesStmt"
-    assert program.statements[1].__class__.__name__ == "RepeatWhileStmt"
-    assert program.statements[2].__class__.__name__ == "RepeatForRangeStmt"
+    assert isinstance(program.statements[0], RepeatTimesStmt)
+    assert isinstance(program.statements[1], RepeatWhileStmt)
+    assert isinstance(program.statements[2], RepeatForRangeStmt)
